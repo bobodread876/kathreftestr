@@ -36,10 +36,12 @@ ENV NODE_ENV=production
 # Copy necessary files
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/app ./app
+
+# Copy public directory if it exists
+RUN mkdir -p ./public
 
 # Create a non-root user
 RUN addgroup --gid 1001 nodejs && \

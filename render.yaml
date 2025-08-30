@@ -4,7 +4,7 @@ services:
     name: nostr-stream-bridge
     runtime: docker
     plan: free
-    dockerfilePath: ./Dockerfile.render
+    dockerfilePath: Dockerfile.render
     dockerContext: .
     envVars:
       - key: NODE_ENV
