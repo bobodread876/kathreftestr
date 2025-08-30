@@ -49,40 +49,63 @@ export function startMirror(options: MirrorOptions): MirrorResult {
   
   let command: string;
   if (isYouTube) {
-    // For YouTube, extract the direct stream URL and use ffmpeg directly
+    // For YouTube, use multiple extraction methods with better bot evasion
     command = `
       while true; do
         echo "[Stream ${id}] Attempting to connect to YouTube stream..."
         
-        # Extract the direct stream URL using yt-dlp
-        echo "[Stream ${id}] Getting stream URL from YouTube..."
-        STREAM_URL=$(yt-dlp -f "best[height<=1080]/best" --get-url \
-          --no-warnings \
-          --extractor-args "youtube:player_client=android,web" \
-          "${options.sourceUrl}" 2>/dev/null | head -1)
+        # Method 1: Try yt-dlp with cookies and user agent
+        echo "[Stream ${id}] Method 1: Trying yt-dlp with enhanced options..."
+        STREAM_URL=$(yt-dlp \
+          --format "best[height<=1080][ext=mp4]/best[height<=1080]/best" \
+          --get-url \
+          --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+          --extractor-args "youtube:player_client=ios,android,web,tv_embedded" \
+          --no-check-certificate \
+          --quiet --no-warnings \
+          "${options.sourceUrl}" 2>&1 | grep -E '^https' | head -1)
         
         if [ -n "$STREAM_URL" ]; then
-          echo "[Stream ${id}] Got stream URL, starting stream..."
-          # Use ffmpeg directly with the extracted URL
-          ffmpeg -re -i "$STREAM_URL" \
-            -c:v libx264 -preset ultrafast -tune zerolatency -b:v 2500k \
+          echo "[Stream ${id}] Got stream URL via yt-dlp, starting stream..."
+          ffmpeg -user_agent "Mozilla/5.0" -re -i "$STREAM_URL" \
+            -c:v libx264 -preset veryfast -tune zerolatency -b:v 2000k -maxrate 2500k -bufsize 5000k \
             -c:a aac -ar 44100 -b:a 128k \
-            -f flv ${rtmpUrl} 2>&1
+            -f flv -flvflags no_duration_filesize ${rtmpUrl} 2>&1
           
-          echo "[Stream ${id}] Stream ended, will retry..."
+          echo "[Stream ${id}] Stream ended"
         else
-          echo "[Stream ${id}] Failed to get stream URL, trying streamlink..."
-          # Fallback to streamlink
-          streamlink --stdout "${options.sourceUrl}" best \
-            --http-no-ssl-verify --retry-streams 5 2>&1 | \
+          # Method 2: Try direct yt-dlp pipe with different client
+          echo "[Stream ${id}] Method 2: Trying direct yt-dlp pipe..."
+          yt-dlp \
+            --format "best[height<=720]/best" \
+            --quiet --no-warnings -o - \
+            --user-agent "Mozilla/5.0" \
+            --extractor-args "youtube:player_client=tv_embedded" \
+            "${options.sourceUrl}" 2>/dev/null | \
             ffmpeg -re -i pipe:0 \
-              -c:v libx264 -preset ultrafast -tune zerolatency -b:v 2500k \
+              -c:v libx264 -preset veryfast -tune zerolatency -b:v 2000k \
               -c:a aac -ar 44100 -b:a 128k \
               -f flv ${rtmpUrl} 2>&1
+          
+          if [ \${PIPESTATUS[0]} -ne 0 ]; then
+            # Method 3: Fallback to streamlink
+            echo "[Stream ${id}] Method 3: Trying streamlink..."
+            streamlink \
+              --player-external-http \
+              --player-external-http-port 0 \
+              --default-stream "720p,best" \
+              --retry-streams 3 \
+              --retry-max 3 \
+              "${options.sourceUrl}" best -O 2>/dev/null | \
+              ffmpeg -re -i pipe:0 \
+                -c:v libx264 -preset veryfast -tune zerolatency -b:v 2000k \
+                -c:a aac -ar 44100 -b:a 128k \
+                -f flv ${rtmpUrl} 2>&1
+          fi
         fi
         
-        echo "[Stream ${id}] Retrying in 10 seconds..."
-        sleep 10
+        echo "[Stream ${id}] Waiting 15 seconds before retry..."
+        sleep 15
       done
     `.trim();
   } else {
