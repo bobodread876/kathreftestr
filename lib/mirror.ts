@@ -32,7 +32,7 @@ export interface MirrorResult {
 export function startMirror(options: MirrorOptions): MirrorResult {
   const id = options.streamId || crypto.randomUUID().slice(0, 8);
   const rtmpBase = process.env.RTMP_URL || "rtmp://localhost:1935/live";
-  const hlsBase = process.env.HLS_BASE || "http://localhost:8888/live";
+  const hlsBase = process.env.HLS_BASE || "http://localhost:8890/live";
   const quality = options.quality || "best";
   
   const rtmpUrl = `${rtmpBase}/${id}`;

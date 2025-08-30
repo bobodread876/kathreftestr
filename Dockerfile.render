@@ -60,12 +60,12 @@ COPY mediamtx.yml /etc/mediamtx.yml
 # Copy supervisor config
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Copy startup script
-COPY start.sh /start.sh
-RUN chmod +x /start.sh
+# Copy entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Expose ports
 EXPOSE 10000 1935 8890
 
-# Start services with supervisor
-CMD ["/start.sh"]
+# Start both services
+ENTRYPOINT ["/entrypoint.sh"]
