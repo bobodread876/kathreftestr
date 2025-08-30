@@ -11,10 +11,20 @@ fi
 
 # Start MediaMTX in the background
 echo "Starting MediaMTX..."
-/usr/local/bin/mediamtx /etc/mediamtx.yml &
+/usr/local/bin/mediamtx /etc/mediamtx.yml 2>&1 | sed 's/^/[MediaMTX] /' &
+MEDIAMTX_PID=$!
 
 # Wait for MediaMTX to be ready
-sleep 2
+echo "Waiting for MediaMTX to be ready..."
+sleep 3
+
+# Check if MediaMTX is running
+if ! kill -0 $MEDIAMTX_PID 2>/dev/null; then
+    echo "ERROR: MediaMTX failed to start!"
+    exit 1
+fi
+
+echo "MediaMTX is running with PID $MEDIAMTX_PID"
 
 # Start Next.js
 echo "Starting Next.js application..."
