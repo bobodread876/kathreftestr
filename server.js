@@ -1,18 +1,21 @@
 const { spawn } = require('child_process');
 const { existsSync } = require('fs');
 const { createServer } = require('http');
+const { parse } = require('url');
+const next = require('next');
 const { WebSocketServer } = require('ws');
+
+const dev = process.env.NODE_ENV !== 'production';
+const app = next({ dev });
+const handle = app.getRequestHandler();
 
 let mediamtxProcess = null;
 const activeStreams = new Map();
 
-// Start WebSocket server for browser streaming
-function startWebSocketServer(port = 8081) {
-  const wss = new WebSocketServer({ port });
-  
-  console.log(`WebSocket server for browser streaming on port ${port}`);
-  
-  wss.on('connection', (ws) => {
+// WebSocket handler for browser streaming
+function handleWebSocket(wss) {
+  wss.on('connection', (ws, req) => {
+    console.log('WebSocket connection established from', req.url);
     let ffmpegProcess = null;
     let streamId = null;
     
@@ -76,72 +79,70 @@ function startWebSocketServer(port = 8081) {
       }
     });
   });
-  
-  return wss;
 }
 
-// Start MediaMTX first if in production
-if (process.env.NODE_ENV === 'production') {
-  const mediamtxPath = '/usr/local/bin/mediamtx';
-  const configPath = '/etc/mediamtx.yml';
+// Start MediaMTX if in production
+async function startMediaMTX() {
+  if (process.env.NODE_ENV === 'production') {
+    const mediamtxPath = '/usr/local/bin/mediamtx';
+    const configPath = '/etc/mediamtx.yml';
   
-  // Start WebSocket server
-  startWebSocketServer(8081);
-  
-  if (existsSync(mediamtxPath)) {
-    console.log('Starting MediaMTX server...');
-    
-    mediamtxProcess = spawn(mediamtxPath, [configPath], {
-      stdio: 'inherit',
-      detached: false,
-    });
-    
-    mediamtxProcess.on('error', (err) => {
-      console.error('Failed to start MediaMTX:', err);
-      console.log('Continuing with Next.js anyway...');
-      mediamtxProcess = null;
-    });
-    
-    mediamtxProcess.on('exit', (code) => {
-      console.log(`MediaMTX exited with code ${code}`);
-      if (code !== 0) {
-        console.error('MediaMTX failed to start properly. This may be due to port conflicts.');
+    if (existsSync(mediamtxPath)) {
+      console.log('Starting MediaMTX server...');
+      
+      mediamtxProcess = spawn(mediamtxPath, [configPath], {
+        stdio: 'inherit',
+        detached: false,
+      });
+      
+      mediamtxProcess.on('error', (err) => {
+        console.error('Failed to start MediaMTX:', err);
         console.log('Continuing with Next.js anyway...');
-      }
-      mediamtxProcess = null;
-    });
-    
-    // Start Next.js after a short delay
-    setTimeout(() => {
-      console.log('Starting Next.js application...');
-      startNextJs();
-    }, 2000);
-  } else {
-    console.log('MediaMTX not found, starting Next.js directly...');
-    startNextJs();
+        mediamtxProcess = null;
+      });
+      
+      mediamtxProcess.on('exit', (code) => {
+        console.log(`MediaMTX exited with code ${code}`);
+        if (code !== 0) {
+          console.error('MediaMTX failed to start properly. This may be due to port conflicts.');
+          console.log('Continuing with Next.js anyway...');
+        }
+        mediamtxProcess = null;
+      });
+      
+      // Wait for MediaMTX to start
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    } else {
+      console.log('MediaMTX not found in production');
+    }
   }
-} else {
-  startNextJs();
 }
 
-function startNextJs() {
-  // Start Next.js
-  const next = spawn('npm', ['run', 'start:next'], {
-    stdio: 'inherit',
-    shell: true,
+// Main server setup
+app.prepare().then(() => {
+  const server = createServer((req, res) => {
+    const parsedUrl = parse(req.url, true);
+    handle(req, res, parsedUrl);
   });
   
-  next.on('error', (err) => {
-    console.error('Failed to start Next.js:', err);
-    cleanup();
-    process.exit(1);
+  // Create WebSocket server attached to the same HTTP server
+  const wss = new WebSocketServer({ 
+    server,
+    path: '/api/ws'
   });
   
-  next.on('exit', (code) => {
-    cleanup();
-    process.exit(code);
+  handleWebSocket(wss);
+  
+  const PORT = process.env.PORT || 3000;
+  
+  server.listen(PORT, async (err) => {
+    if (err) throw err;
+    console.log(`> Ready on http://localhost:${PORT}`);
+    
+    // Start MediaMTX after server is up
+    await startMediaMTX();
   });
-}
+});
 
 function cleanup() {
   if (mediamtxProcess) {

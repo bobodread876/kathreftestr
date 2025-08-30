@@ -52,10 +52,9 @@ export default function BrowserStreamPage() {
         videoRef.current.srcObject = stream;
       }
 
-      // Connect to WebSocket server
-      const wsUrl = window.location.protocol === 'https:' 
-        ? `wss://${window.location.host}:8081`
-        : `ws://${window.location.hostname}:8081`;
+      // Connect to WebSocket server on same port via /api/ws path
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProtocol}//${window.location.host}/api/ws`;
       
       const ws = new WebSocket(wsUrl);
       websocketRef.current = ws;
