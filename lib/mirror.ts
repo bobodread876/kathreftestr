@@ -49,39 +49,55 @@ export function startMirror(options: MirrorOptions): MirrorResult {
   
   let command: string;
   if (isYouTube) {
-    // For YouTube, try streamlink first as it often bypasses bot detection better
-    // Use a wrapper script that will retry on failure
+    // For YouTube, use a more robust approach with better error handling
     command = `
       while true; do
         echo "[Stream ${id}] Attempting to connect to YouTube stream..."
         
-        # Try streamlink first (often works better for YouTube live)
-        streamlink --stdout "${options.sourceUrl}" best --retry-streams 30 --retry-max 10 2>/dev/null | \
-          ffmpeg -re -i pipe:0 -c:v copy -c:a aac -ar 44100 -b:a 128k -f flv ${rtmpUrl} 2>&1
+        # Try yt-dlp first with live stream specific options
+        echo "[Stream ${id}] Trying yt-dlp for YouTube live stream..."
+        yt-dlp --live-from-start -f "best[height<=1080]/best" -o - \
+          --no-warnings --no-part --no-continue \
+          --extractor-args "youtube:player_client=android" \
+          "${options.sourceUrl}" 2>&1 | \
+          ffmpeg -re -i pipe:0 \
+            -c:v libx264 -preset ultrafast -tune zerolatency \
+            -c:a aac -ar 44100 -b:a 128k \
+            -f flv ${rtmpUrl} 2>&1
         
-        # If streamlink fails, try yt-dlp with different options
-        if [ $? -ne 0 ]; then
-          echo "[Stream ${id}] Streamlink failed, trying yt-dlp..."
-          yt-dlp --no-warnings -f "best[height<=1080]/best" -o - \
-            --ignore-errors --no-abort-on-error \
-            --extractor-retries 5 --fragment-retries 5 \
-            "${options.sourceUrl}" 2>/dev/null | \
-            ffmpeg -re -i pipe:0 -c:v copy -c:a aac -ar 44100 -b:a 128k -f flv ${rtmpUrl} 2>&1
+        EXIT_CODE=$?
+        if [ $EXIT_CODE -eq 0 ]; then
+          echo "[Stream ${id}] Stream ended normally"
+        else
+          echo "[Stream ${id}] Stream failed with exit code $EXIT_CODE"
+          
+          # Fallback to streamlink
+          echo "[Stream ${id}] Trying streamlink as fallback..."
+          streamlink --stdout "${options.sourceUrl}" best \
+            --http-no-ssl-verify --retry-streams 30 2>&1 | \
+            ffmpeg -re -i pipe:0 \
+              -c:v libx264 -preset ultrafast -tune zerolatency \
+              -c:a aac -ar 44100 -b:a 128k \
+              -f flv ${rtmpUrl} 2>&1
         fi
         
-        echo "[Stream ${id}] Stream ended or failed, retrying in 5 seconds..."
-        sleep 5
+        echo "[Stream ${id}] Retrying in 10 seconds..."
+        sleep 10
       done
     `.trim();
   } else {
-    // Use streamlink for Twitch and other platforms with retry
+    // Use streamlink for Twitch with better error visibility
     command = `
       while true; do
-        echo "[Stream ${id}] Connecting to stream..."
-        streamlink --stdout "${options.sourceUrl}" ${quality} --retry-streams 30 --retry-max 10 2>/dev/null | \
-          ffmpeg -re -i pipe:0 -c:v copy -c:a aac -b:a 128k -f flv ${rtmpUrl} 2>&1
-        echo "[Stream ${id}] Stream ended, retrying in 5 seconds..."
-        sleep 5
+        echo "[Stream ${id}] Connecting to Twitch stream..."
+        streamlink --stdout "${options.sourceUrl}" ${quality} \
+          --retry-streams 30 --retry-max 10 2>&1 | \
+          ffmpeg -re -i pipe:0 \
+            -c:v libx264 -preset ultrafast -tune zerolatency \
+            -c:a aac -b:a 128k \
+            -f flv ${rtmpUrl} 2>&1
+        echo "[Stream ${id}] Stream ended, retrying in 10 seconds..."
+        sleep 10
       done
     `.trim();
   }
