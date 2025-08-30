@@ -121,13 +121,13 @@ export function getAllMirrors(): MirrorHandle[] {
 }
 
 export function stopAllMirrors(): void {
-  for (const [id, handle] of RUNNING.entries()) {
+  RUNNING.forEach((handle, id) => {
     try {
       handle.proc.kill("SIGTERM");
     } catch (error) {
       console.error(`Failed to stop stream ${id}:`, error);
     }
-  }
+  });
   RUNNING.clear();
 }
 
