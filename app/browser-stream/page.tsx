@@ -18,6 +18,7 @@ export default function BrowserStreamPage() {
       setStatus('Starting browser-based stream...');
       
       // First, get stream metadata from server
+      console.log('Requesting stream metadata from server...');
       const response = await fetch('/api/browser-stream/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -26,14 +27,25 @@ export default function BrowserStreamPage() {
         })
       });
 
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Server error:', response.status, errorText);
+        throw new Error(`Server error: ${response.status} - ${errorText}`);
+      }
+
       const data = await response.json();
+      console.log('Stream metadata received:', data);
       
       if (!data.ok) {
         throw new Error(data.error || 'Failed to start stream');
       }
 
+      if (!data.stream?.id) {
+        throw new Error('No stream ID received from server');
+      }
+
       setStreamId(data.stream.id);
-      setNpub(data.nostr.npub);
+      setNpub(data.nostr?.npub || '');
       
       // Screen capture (includes audio)
       const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -56,6 +68,7 @@ export default function BrowserStreamPage() {
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${wsProtocol}//${window.location.host}/api/ws`;
       
+      console.log('Connecting to WebSocket:', wsUrl);
       const ws = new WebSocket(wsUrl);
       websocketRef.current = ws;
       
@@ -63,8 +76,15 @@ export default function BrowserStreamPage() {
         console.log('WebSocket connected');
         // Send metadata after a short delay to ensure connection is ready
         setTimeout(() => {
-          console.log('Sending stream metadata:', data.stream.id);
-          ws.send(JSON.stringify({ streamId: data.stream.id }));
+          const streamMetadata = { streamId: data.stream.id };
+          console.log('Sending stream metadata:', streamMetadata);
+          try {
+            ws.send(JSON.stringify(streamMetadata));
+            console.log('Metadata sent successfully');
+          } catch (e) {
+            console.error('Error sending metadata:', e);
+            setStatus('Failed to send stream metadata');
+          }
         }, 100);
       };
       
@@ -89,7 +109,14 @@ export default function BrowserStreamPage() {
       
       ws.onerror = (error) => {
         console.error('WebSocket error:', error);
-        setStatus('WebSocket connection error');
+        setStatus('WebSocket connection error - check browser console');
+      };
+      
+      ws.onclose = (event) => {
+        console.log('WebSocket closed:', event.code, event.reason);
+        if (!event.wasClean) {
+          setStatus(`WebSocket closed unexpectedly: ${event.reason || 'Unknown reason'}`);
+        }
       };
       
       // Start MediaRecorder to capture and send video
@@ -113,9 +140,19 @@ export default function BrowserStreamPage() {
         stopStream();
       });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error starting stream:', error);
-      setStatus(`Error: ${error}`);
+      setStatus(`Error: ${error.message || error}`);
+      
+      // Clean up on error
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(track => track.stop());
+        mediaStreamRef.current = null;
+      }
+      if (websocketRef.current) {
+        websocketRef.current.close();
+        websocketRef.current = null;
+      }
     }
   };
 
