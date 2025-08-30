@@ -7,15 +7,35 @@ export default function BrowserStreamPage() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamId, setStreamId] = useState('');
   const [status, setStatus] = useState('');
+  const [npub, setNpub] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
-  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const websocketRef = useRef<WebSocket | null>(null);
 
   const startBrowserStream = async () => {
     try {
       setStatus('Starting browser-based stream...');
       
-      // Option 1: Screen capture (includes audio)
+      // First, get stream metadata from server
+      const response = await fetch('/api/browser-stream/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceUrl: streamUrl || 'Browser Screen Capture'
+        })
+      });
+
+      const data = await response.json();
+      
+      if (!data.ok) {
+        throw new Error(data.error || 'Failed to start stream');
+      }
+
+      setStreamId(data.stream.id);
+      setNpub(data.nostr.npub);
+      
+      // Screen capture (includes audio)
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           width: { ideal: 1280 },
@@ -32,49 +52,50 @@ export default function BrowserStreamPage() {
         videoRef.current.srcObject = stream;
       }
 
-      // Create WebRTC connection
-      const pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-      });
-      peerConnectionRef.current = pc;
-
-      // Add tracks to peer connection
-      stream.getTracks().forEach(track => {
-        pc.addTrack(track, stream);
-      });
-
-      // Create offer
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      // Send offer to server and get stream details
-      const response = await fetch('/api/browser-stream/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sourceUrl: streamUrl,
-          sdp: offer.sdp
-        })
-      });
-
-      const data = await response.json();
+      // Connect to WebSocket server
+      const wsUrl = window.location.protocol === 'https:' 
+        ? `wss://${window.location.host}:8081`
+        : `ws://${window.location.hostname}:8081`;
       
-      if (data.ok) {
-        setStreamId(data.stream.id);
-        setIsStreaming(true);
-        setStatus(`Streaming! HLS: ${data.stream.hls}`);
-        
-        // Set remote description
-        if (data.sdp) {
-          await pc.setRemoteDescription({
-            type: 'answer',
-            sdp: data.sdp
-          });
+      const ws = new WebSocket(wsUrl);
+      websocketRef.current = ws;
+      
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        // Send metadata first
+        ws.send(JSON.stringify({ streamId: data.stream.id }));
+      };
+      
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.status === 'ready') {
+          console.log('Server ready to receive stream');
+          setStatus(`Streaming! View at: https://zap.stream/${data.nostr.npub}`);
+          setIsStreaming(true);
         }
-      } else {
-        throw new Error(data.error || 'Failed to start stream');
-      }
-
+      };
+      
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        setStatus('WebSocket connection error');
+      };
+      
+      // Start MediaRecorder to capture and send video
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'video/webm;codecs=vp8,opus',
+        videoBitsPerSecond: 2000000
+      });
+      mediaRecorderRef.current = mediaRecorder;
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
+          ws.send(event.data);
+        }
+      };
+      
+      // Start recording in chunks
+      mediaRecorder.start(100); // Send data every 100ms
+      
       // Handle stream end
       stream.getTracks()[0].addEventListener('ended', () => {
         stopStream();
@@ -87,16 +108,22 @@ export default function BrowserStreamPage() {
   };
 
   const stopStream = async () => {
+    // Stop MediaRecorder
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
+    }
+    
     // Stop media stream
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach(track => track.stop());
       mediaStreamRef.current = null;
     }
 
-    // Close peer connection
-    if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
+    // Close WebSocket
+    if (websocketRef.current) {
+      websocketRef.current.close();
+      websocketRef.current = null;
     }
 
     // Stop stream on server
@@ -110,6 +137,8 @@ export default function BrowserStreamPage() {
 
     setIsStreaming(false);
     setStatus('Stream stopped');
+    setStreamId('');
+    setNpub('');
   };
 
   return (
@@ -179,7 +208,19 @@ export default function BrowserStreamPage() {
           <div className="mt-6 p-4 bg-green-900 rounded-lg">
             <p className="font-semibold">Stream is Live!</p>
             <p className="text-sm mt-2">Stream ID: {streamId}</p>
-            <p className="text-sm">Check zap.stream for your stream</p>
+            {npub && (
+              <div className="mt-3">
+                <p className="text-sm mb-2">View your stream on zap.stream:</p>
+                <a 
+                  href={`https://zap.stream/${npub}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-block px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-semibold"
+                >
+                  Open on zap.stream →
+                </a>
+              </div>
+            )}
           </div>
         )}
       </div>

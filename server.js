@@ -1,12 +1,92 @@
 const { spawn } = require('child_process');
 const { existsSync } = require('fs');
+const { createServer } = require('http');
+const { WebSocketServer } = require('ws');
 
 let mediamtxProcess = null;
+const activeStreams = new Map();
+
+// Start WebSocket server for browser streaming
+function startWebSocketServer(port = 8081) {
+  const wss = new WebSocketServer({ port });
+  
+  console.log(`WebSocket server for browser streaming on port ${port}`);
+  
+  wss.on('connection', (ws) => {
+    let ffmpegProcess = null;
+    let streamId = null;
+    
+    ws.on('message', (message) => {
+      try {
+        // First message is metadata
+        if (!ffmpegProcess && message.toString().startsWith('{')) {
+          const metadata = JSON.parse(message.toString());
+          streamId = metadata.streamId;
+          const rtmpUrl = `rtmp://localhost:1935/live/${streamId}`;
+          
+          console.log(`Starting ffmpeg for browser stream ${streamId}`);
+          
+          // Start ffmpeg to transcode WebM to RTMP
+          ffmpegProcess = spawn('ffmpeg', [
+            '-f', 'webm',
+            '-i', 'pipe:0',
+            '-c:v', 'libx264',
+            '-preset', 'veryfast',
+            '-tune', 'zerolatency',
+            '-c:a', 'aac',
+            '-ar', '44100',
+            '-b:a', '128k',
+            '-f', 'flv',
+            rtmpUrl
+          ], {
+            stdio: ['pipe', 'pipe', 'pipe']
+          });
+          
+          activeStreams.set(streamId, ffmpegProcess);
+          
+          ffmpegProcess.stderr.on('data', (data) => {
+            const output = data.toString();
+            if (!output.includes('frame=')) {
+              console.log(`[Browser ${streamId}]:`, output);
+            }
+          });
+          
+          ffmpegProcess.on('exit', (code) => {
+            console.log(`[Browser ${streamId}] ffmpeg exited with code ${code}`);
+            activeStreams.delete(streamId);
+          });
+          
+          ws.send(JSON.stringify({ status: 'ready', streamId }));
+        }
+        // Subsequent messages are video chunks
+        else if (ffmpegProcess && ffmpegProcess.stdin && Buffer.isBuffer(message)) {
+          ffmpegProcess.stdin.write(message);
+        }
+      } catch (error) {
+        console.error('WebSocket message error:', error);
+      }
+    });
+    
+    ws.on('close', () => {
+      console.log(`WebSocket closed for stream ${streamId}`);
+      if (ffmpegProcess) {
+        ffmpegProcess.stdin.end();
+        ffmpegProcess.kill();
+        activeStreams.delete(streamId);
+      }
+    });
+  });
+  
+  return wss;
+}
 
 // Start MediaMTX first if in production
 if (process.env.NODE_ENV === 'production') {
   const mediamtxPath = '/usr/local/bin/mediamtx';
   const configPath = '/etc/mediamtx.yml';
+  
+  // Start WebSocket server
+  startWebSocketServer(8081);
   
   if (existsSync(mediamtxPath)) {
     console.log('Starting MediaMTX server...');
