@@ -1,0 +1,36 @@
+# MediaMTX Configuration
+logLevel: info
+logDestinations: [stdout]
+
+# RTMP Server Configuration
+rtmp: yes
+rtmpAddress: :1935
+
+# HLS Server Configuration
+hls: yes
+hlsAddress: :8888
+hlsAllowOrigin: "*"
+hlsVariant: lowLatency
+hlsMuxerSegmentCount: 5
+hlsMuxerSegmentDuration: 1s
+hlsMuxerMaxSize: 1MB
+
+# Path Configuration
+paths:
+  # Allow dynamic paths for multiple streams
+  ~^live/.*$:
+    # No authentication for development
+    publishUser: ""
+    publishPass: ""
+    readUser: ""
+    readPass: ""
+    
+    # Allow any source to publish
+    source: publisher
+    sourceOnDemand: no
+    sourceOnDemandStartTimeout: 10s
+    sourceOnDemandCloseAfter: 10s
+    
+    # Enable HLS for this path
+    runOnPublish: echo "Stream started: $RTSP_PATH"
+    runOnPublishRestart: yes
