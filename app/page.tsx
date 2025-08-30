@@ -210,13 +210,29 @@ export default function Home() {
             
             <div className="mt-6 p-4 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
               <p className="text-sm font-semibold text-purple-700 dark:text-purple-400 mb-2">
+                View Your Stream:
+              </p>
+              <div className="mb-4">
+                <a 
+                  href={`https://zap.stream/${result.nostr.npub}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  Open on zap.stream
+                </a>
+              </div>
+              <p className="text-sm font-semibold text-purple-700 dark:text-purple-400 mb-2">
                 Next Steps:
               </p>
               <ul className="text-sm text-gray-700 dark:text-gray-300 space-y-1 list-disc list-inside">
-                <li>Open <a href="https://zap.stream" target="_blank" rel="noreferrer" className="text-purple-600 hover:underline">zap.stream</a> or another Nostr live client</li>
-                <li>Search for your stream or browse live streams</li>
+                <li>Your stream is now live on Nostr</li>
                 <li>Viewers can send Lightning zaps to the address above</li>
-                <li>Stream owner can claim the npub and accumulated zaps later</li>
+                <li>Stream owner can claim the npub and accumulated zaps at <a href="https://npub.cash" target="_blank" rel="noreferrer" className="text-purple-600 hover:underline">npub.cash</a></li>
+                <li>Share the zap.stream link with your audience</li>
               </ul>
             </div>
           </div>

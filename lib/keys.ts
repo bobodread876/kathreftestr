@@ -1,5 +1,6 @@
-import { generatePrivateKey, getPublicKey } from "nostr-tools";
-import { nip19 } from "nostr-tools";
+import { generateSecretKey, getPublicKey } from "nostr-tools/pure";
+import * as nip19 from "nostr-tools/nip19";
+import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 
 export interface Keypair {
   skHex: string;
@@ -9,9 +10,10 @@ export interface Keypair {
 }
 
 export function generateKeypair(): Keypair {
-  const skHex = generatePrivateKey(); // 32-byte hex
-  const pkHex = getPublicKey(skHex);
-  const nsec = nip19.nsecEncode(skHex);
+  const sk = generateSecretKey(); // 32-byte Uint8Array
+  const skHex = bytesToHex(sk);
+  const pkHex = getPublicKey(sk);
+  const nsec = nip19.nsecEncode(sk);
   const npub = nip19.npubEncode(pkHex);
   return { skHex, pkHex, nsec, npub };
 }
@@ -21,5 +23,5 @@ export function derivePublicKey(nsec: string): string {
   if (decoded.type !== 'nsec') {
     throw new Error('Invalid nsec');
   }
-  return getPublicKey(decoded.data as string);
+  return getPublicKey(decoded.data as Uint8Array);
 }

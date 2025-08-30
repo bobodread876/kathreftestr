@@ -38,27 +38,40 @@ export function startMirror(options: MirrorOptions): MirrorResult {
   const rtmpUrl = `${rtmpBase}/${id}`;
   const hlsUrl = `${hlsBase}/${id}/index.m3u8`;
 
-  // Use streamlink for better stability with live streams
-  // Fall back to yt-dlp if streamlink isn't available
-  const command = process.platform === "win32" 
-    ? `streamlink -O "${options.sourceUrl}" ${quality} | ffmpeg -v error -re -i pipe:0 -c:v copy -c:a aac -f flv ${rtmpUrl}`
-    : `streamlink -O "${options.sourceUrl}" ${quality} 2>/dev/null | ffmpeg -v error -re -i pipe:0 -c:v copy -c:a aac -f flv ${rtmpUrl} 2>&1`;
-
-  const shell = process.platform === "win32" ? "cmd" : "bash";
-  const shellArgs = process.platform === "win32" ? ["/c", command] : ["-c", command];
+  // Try yt-dlp first as it's more reliable for YouTube
+  // Use streamlink as fallback for Twitch
+  const isYouTube = options.sourceUrl.includes('youtube.com') || options.sourceUrl.includes('youtu.be');
   
-  const proc = spawn(shell, shellArgs, {
+  let command: string;
+  if (isYouTube) {
+    // For YouTube live streams, use yt-dlp with live-from-start flag
+    // For regular videos, stream them as if they were live
+    command = `yt-dlp --live-from-start -q -o - "${options.sourceUrl}" 2>/dev/null | ffmpeg -re -i pipe:0 -c:v copy -c:a aac -f flv -flvflags no_duration_filesize ${rtmpUrl}`;
+  } else {
+    // Use streamlink for Twitch and other platforms
+    command = `streamlink --stdout "${options.sourceUrl}" ${quality} 2>/dev/null | ffmpeg -re -i pipe:0 -c:v copy -c:a aac -f flv -flvflags no_duration_filesize ${rtmpUrl}`;
+  }
+  
+  console.log(`[Stream ${id}] Executing command:`, command);
+  
+  // Use exec for piped commands instead of spawn
+  const proc = spawn('bash', ['-c', command], {
     stdio: ["ignore", "pipe", "pipe"],
     detached: false,
+    shell: false,  // Don't use shell since we're already using bash -c
   });
 
   // Log output for debugging
   proc.stdout?.on("data", (data) => {
-    console.log(`[Stream ${id}] stdout:`, data.toString());
+    const output = data.toString().trim();
+    if (output) console.log(`[Stream ${id}] stdout:`, output);
   });
 
   proc.stderr?.on("data", (data) => {
-    console.error(`[Stream ${id}] stderr:`, data.toString());
+    const output = data.toString().trim();
+    if (output && !output.includes('frame=')) {  // Filter out ffmpeg progress
+      console.error(`[Stream ${id}] stderr:`, output);
+    }
   });
 
   // Clean up on exit

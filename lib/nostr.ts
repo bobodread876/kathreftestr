@@ -1,5 +1,7 @@
-import { EventTemplate, SimplePool, finalizeEvent, Event } from "nostr-tools";
-import { nip19 } from "nostr-tools";
+import { SimplePool } from "nostr-tools/pool";
+import { EventTemplate, finalizeEvent, Event } from "nostr-tools/pure";
+import * as nip19 from "nostr-tools/nip19";
+import { hexToBytes } from "@noble/hashes/utils";
 
 const RELAYS = (process.env.NOSTR_RELAYS || "")
   .split(",")
@@ -13,7 +15,8 @@ export async function publishEvent(
   evt: EventTemplate
 ): Promise<PublishResult> {
   const pool = new SimplePool();
-  const signed = finalizeEvent(evt, skHex);
+  const skBytes = hexToBytes(skHex);
+  const signed = finalizeEvent(evt, skBytes);
   
   const successRelays: string[] = [];
   
@@ -28,7 +31,12 @@ export async function publishEvent(
     })
   );
   
-  pool.close(RELAYS);
+  // Close connections properly
+  try {
+    await pool.close(RELAYS);
+  } catch (e) {
+    // Ignore close errors
+  }
   
   return { id: signed.id!, relays: successRelays };
 }

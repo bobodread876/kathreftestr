@@ -35,14 +35,16 @@ export async function POST(req: NextRequest) {
     let endEventId: string | undefined;
     if (nsec) {
       try {
-        const { nip19 } = await import("nostr-tools");
+        const nip19 = await import("nostr-tools/nip19");
+        const { bytesToHex } = await import("@noble/hashes/utils");
         const decoded = nip19.decode(nsec);
         if (decoded.type !== 'nsec') {
           throw new Error('Invalid nsec');
         }
-        const skHex = decoded.data as string;
-        const { getPublicKey } = await import("nostr-tools");
-        const pkHex = getPublicKey(skHex);
+        const skBytes = decoded.data as Uint8Array;
+        const skHex = bytesToHex(skBytes);
+        const { getPublicKey } = await import("nostr-tools/pure");
+        const pkHex = getPublicKey(skBytes);
 
         // Publish end event
         const endEvt = endEventTemplate({

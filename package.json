@@ -11,6 +11,7 @@
     "stream:stop": "docker compose down"
   },
   "dependencies": {
+    "@noble/hashes": "^1.8.0",
     "dotenv": "^16.3.1",
     "next": "^14.2.32",
     "nostr-tools": "^2.1.8",
