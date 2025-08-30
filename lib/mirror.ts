@@ -49,34 +49,34 @@ export function startMirror(options: MirrorOptions): MirrorResult {
   
   let command: string;
   if (isYouTube) {
-    // For YouTube, use a more robust approach with better error handling
+    // For YouTube, extract the direct stream URL and use ffmpeg directly
     command = `
       while true; do
         echo "[Stream ${id}] Attempting to connect to YouTube stream..."
         
-        # Try yt-dlp first with live stream specific options
-        echo "[Stream ${id}] Trying yt-dlp for YouTube live stream..."
-        yt-dlp --live-from-start -f "best[height<=1080]/best" -o - \
-          --no-warnings --no-part --no-continue \
-          --extractor-args "youtube:player_client=android" \
-          "${options.sourceUrl}" 2>&1 | \
-          ffmpeg -re -i pipe:0 \
-            -c:v libx264 -preset ultrafast -tune zerolatency \
+        # Extract the direct stream URL using yt-dlp
+        echo "[Stream ${id}] Getting stream URL from YouTube..."
+        STREAM_URL=$(yt-dlp -f "best[height<=1080]/best" --get-url \
+          --no-warnings \
+          --extractor-args "youtube:player_client=android,web" \
+          "${options.sourceUrl}" 2>/dev/null | head -1)
+        
+        if [ -n "$STREAM_URL" ]; then
+          echo "[Stream ${id}] Got stream URL, starting stream..."
+          # Use ffmpeg directly with the extracted URL
+          ffmpeg -re -i "$STREAM_URL" \
+            -c:v libx264 -preset ultrafast -tune zerolatency -b:v 2500k \
             -c:a aac -ar 44100 -b:a 128k \
             -f flv ${rtmpUrl} 2>&1
-        
-        EXIT_CODE=$?
-        if [ $EXIT_CODE -eq 0 ]; then
-          echo "[Stream ${id}] Stream ended normally"
-        else
-          echo "[Stream ${id}] Stream failed with exit code $EXIT_CODE"
           
+          echo "[Stream ${id}] Stream ended, will retry..."
+        else
+          echo "[Stream ${id}] Failed to get stream URL, trying streamlink..."
           # Fallback to streamlink
-          echo "[Stream ${id}] Trying streamlink as fallback..."
           streamlink --stdout "${options.sourceUrl}" best \
-            --http-no-ssl-verify --retry-streams 30 2>&1 | \
+            --http-no-ssl-verify --retry-streams 5 2>&1 | \
             ffmpeg -re -i pipe:0 \
-              -c:v libx264 -preset ultrafast -tune zerolatency \
+              -c:v libx264 -preset ultrafast -tune zerolatency -b:v 2500k \
               -c:a aac -ar 44100 -b:a 128k \
               -f flv ${rtmpUrl} 2>&1
         fi
