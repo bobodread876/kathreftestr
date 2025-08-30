@@ -44,9 +44,10 @@ export function startMirror(options: MirrorOptions): MirrorResult {
   
   let command: string;
   if (isYouTube) {
-    // For YouTube, try to get the direct URL first, then stream it
-    // This is more reliable than piping from yt-dlp
-    command = `yt-dlp -f best[ext=mp4]/best -g "${options.sourceUrl}" 2>/dev/null | head -1 | xargs -I {} ffmpeg -re -i {} -c:v copy -c:a aac -b:a 128k -f flv ${rtmpUrl} 2>&1`;
+    // For YouTube live streams, use yt-dlp to directly pipe the stream
+    // The -o - flag outputs to stdout, which we pipe to ffmpeg
+    // Using format selection specifically for live streams
+    command = `yt-dlp --no-warnings --quiet -f "best[height<=1080]/best" -o - "${options.sourceUrl}" | ffmpeg -re -i pipe:0 -c:v copy -c:a aac -ar 44100 -b:a 128k -f flv ${rtmpUrl} 2>&1`;
   } else {
     // Use streamlink for Twitch and other platforms
     command = `streamlink --stdout "${options.sourceUrl}" ${quality} 2>/dev/null | ffmpeg -re -i pipe:0 -c:v copy -c:a aac -b:a 128k -f flv ${rtmpUrl} 2>&1`;
