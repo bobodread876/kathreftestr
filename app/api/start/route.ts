@@ -3,6 +3,7 @@ import { generateKeypair } from "@/lib/keys";
 import { startMirror } from "@/lib/mirror";
 import { publishEvent, profileKind0Template, liveEventTemplate } from "@/lib/nostr";
 import * as nip19 from "nostr-tools/nip19";
+import "@/lib/mediamtx"; // This will auto-start MediaMTX in production
 
 export async function POST(req: NextRequest) {
   try {
