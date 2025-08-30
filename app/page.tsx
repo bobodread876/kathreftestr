@@ -63,6 +63,14 @@ export default function Home() {
           <p className="text-gray-600 dark:text-gray-400">
             Mirror YouTube/Twitch streams to Nostr with Lightning zaps ⚡
           </p>
+          <div className="flex justify-center gap-4 text-sm">
+            <a
+              href="/browser-stream"
+              className="text-purple-600 hover:text-purple-700 dark:text-purple-400 hover:underline"
+            >
+              Having issues? Try Browser Streaming →
+            </a>
+          </div>
         </div>
 
         <form onSubmit={onSubmit} className="space-y-4">
@@ -115,6 +123,17 @@ export default function Home() {
           <div className="p-4 border border-red-200 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400">
             <p className="font-semibold">Error</p>
             <p className="text-sm mt-1">{error}</p>
+            {error.includes("YouTube") && (
+              <div className="mt-3 pt-3 border-t border-red-200 dark:border-red-800">
+                <p className="text-sm mb-2">YouTube blocking issues? Try browser-based streaming:</p>
+                <a
+                  href="/browser-stream"
+                  className="inline-block px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold"
+                >
+                  Use Browser Streaming →
+                </a>
+              </div>
+            )}
           </div>
         )}
 
