@@ -152,7 +152,7 @@ export default function Home() {
                       Private Key (Dev Only):
                     </span>
                     <button
-                      onClick={() => copyToClipboard(result.nostr.nsec, "nsec")}
+                      onClick={() => copyToClipboard(result.nostr.nsec!, "nsec")}
                       className="text-sm text-purple-600 hover:text-purple-700 dark:text-purple-400"
                     >
                       Copy
