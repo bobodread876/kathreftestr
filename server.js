@@ -20,35 +20,61 @@ function handleWebSocket(wss) {
     let streamId = null;
     let metadataReceived = false;
     
+    // Log connection details
+    console.log('WebSocket ready state:', ws.readyState);
+    
     ws.on('message', (message) => {
+      console.log('WebSocket message received, type:', typeof message, 'size:', message.length || message.byteLength || 0);
+      
       try {
         // First message should be metadata
         if (!metadataReceived) {
+          let messageStr = '';
+          if (Buffer.isBuffer(message)) {
+            messageStr = message.toString();
+          } else if (typeof message === 'string') {
+            messageStr = message;
+          } else {
+            messageStr = message.toString();
+          }
+          
+          console.log('First message content:', messageStr);
+          
           // Try to parse as JSON
           try {
-            const metadata = JSON.parse(message.toString());
+            const metadata = JSON.parse(messageStr);
+            console.log('Parsed metadata:', metadata);
+            
             if (metadata.streamId) {
               streamId = metadata.streamId;
               metadataReceived = true;
               const rtmpUrl = `rtmp://localhost:1935/live/${streamId}`;
               
-              console.log(`Starting ffmpeg for browser stream ${streamId}`);
+              console.log(`Starting ffmpeg for browser stream ${streamId} -> ${rtmpUrl}`);
               
               // Start ffmpeg to transcode WebM to RTMP
-              ffmpegProcess = spawn('ffmpeg', [
-                '-f', 'webm',
-                '-i', 'pipe:0',
-                '-c:v', 'libx264',
-                '-preset', 'veryfast',
-                '-tune', 'zerolatency',
-                '-c:a', 'aac',
-                '-ar', '44100',
-                '-b:a', '128k',
-                '-f', 'flv',
-                rtmpUrl
-              ], {
-                stdio: ['pipe', 'pipe', 'pipe']
-              });
+              try {
+                ffmpegProcess = spawn('ffmpeg', [
+                  '-f', 'webm',
+                  '-i', 'pipe:0',
+                  '-c:v', 'libx264',
+                  '-preset', 'veryfast',
+                  '-tune', 'zerolatency',
+                  '-c:a', 'aac',
+                  '-ar', '44100',
+                  '-b:a', '128k',
+                  '-f', 'flv',
+                  rtmpUrl
+                ], {
+                  stdio: ['pipe', 'pipe', 'pipe']
+                });
+                
+                console.log(`ffmpeg process started with PID: ${ffmpegProcess.pid}`);
+              } catch (spawnError) {
+                console.error(`Failed to spawn ffmpeg:`, spawnError);
+                ws.send(JSON.stringify({ error: 'Failed to start video processing' }));
+                return;
+              }
               
               activeStreams.set(streamId, ffmpegProcess);
               
@@ -90,6 +116,10 @@ function handleWebSocket(wss) {
       } catch (error) {
         console.error('WebSocket message error:', error);
       }
+    });
+    
+    ws.on('error', (error) => {
+      console.error('WebSocket error:', error);
     });
     
     ws.on('close', () => {
