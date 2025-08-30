@@ -32,7 +32,12 @@ export interface MirrorResult {
 export function startMirror(options: MirrorOptions): MirrorResult {
   const id = options.streamId || crypto.randomUUID().slice(0, 8);
   const rtmpBase = process.env.RTMP_URL || "rtmp://localhost:1935/live";
-  const hlsBase = process.env.HLS_BASE || "http://localhost:8890/live";
+  
+  // In production, use the public URL for HLS
+  const defaultHlsBase = process.env.NODE_ENV === 'production' 
+    ? "https://kathreftestr.onrender.com/live"
+    : "http://localhost:8890/live";
+  const hlsBase = process.env.HLS_BASE || defaultHlsBase;
   const quality = options.quality || "best";
   
   const rtmpUrl = `${rtmpBase}/${id}`;
@@ -44,13 +49,41 @@ export function startMirror(options: MirrorOptions): MirrorResult {
   
   let command: string;
   if (isYouTube) {
-    // For YouTube live streams, use yt-dlp to directly pipe the stream
-    // The -o - flag outputs to stdout, which we pipe to ffmpeg
-    // Using format selection specifically for live streams
-    command = `yt-dlp --no-warnings --quiet -f "best[height<=1080]/best" -o - "${options.sourceUrl}" | ffmpeg -re -i pipe:0 -c:v copy -c:a aac -ar 44100 -b:a 128k -f flv ${rtmpUrl} 2>&1`;
+    // For YouTube, try streamlink first as it often bypasses bot detection better
+    // Use a wrapper script that will retry on failure
+    command = `
+      while true; do
+        echo "[Stream ${id}] Attempting to connect to YouTube stream..."
+        
+        # Try streamlink first (often works better for YouTube live)
+        streamlink --stdout "${options.sourceUrl}" best --retry-streams 30 --retry-max 10 2>/dev/null | \
+          ffmpeg -re -i pipe:0 -c:v copy -c:a aac -ar 44100 -b:a 128k -f flv ${rtmpUrl} 2>&1
+        
+        # If streamlink fails, try yt-dlp with different options
+        if [ $? -ne 0 ]; then
+          echo "[Stream ${id}] Streamlink failed, trying yt-dlp..."
+          yt-dlp --no-warnings -f "best[height<=1080]/best" -o - \
+            --ignore-errors --no-abort-on-error \
+            --extractor-retries 5 --fragment-retries 5 \
+            "${options.sourceUrl}" 2>/dev/null | \
+            ffmpeg -re -i pipe:0 -c:v copy -c:a aac -ar 44100 -b:a 128k -f flv ${rtmpUrl} 2>&1
+        fi
+        
+        echo "[Stream ${id}] Stream ended or failed, retrying in 5 seconds..."
+        sleep 5
+      done
+    `.trim();
   } else {
-    // Use streamlink for Twitch and other platforms
-    command = `streamlink --stdout "${options.sourceUrl}" ${quality} 2>/dev/null | ffmpeg -re -i pipe:0 -c:v copy -c:a aac -b:a 128k -f flv ${rtmpUrl} 2>&1`;
+    // Use streamlink for Twitch and other platforms with retry
+    command = `
+      while true; do
+        echo "[Stream ${id}] Connecting to stream..."
+        streamlink --stdout "${options.sourceUrl}" ${quality} --retry-streams 30 --retry-max 10 2>/dev/null | \
+          ffmpeg -re -i pipe:0 -c:v copy -c:a aac -b:a 128k -f flv ${rtmpUrl} 2>&1
+        echo "[Stream ${id}] Stream ended, retrying in 5 seconds..."
+        sleep 5
+      done
+    `.trim();
   }
   
   console.log(`[Stream ${id}] Executing command:`, command);
