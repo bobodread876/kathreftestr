@@ -61,16 +61,29 @@ export default function BrowserStreamPage() {
       
       ws.onopen = () => {
         console.log('WebSocket connected');
-        // Send metadata first
-        ws.send(JSON.stringify({ streamId: data.stream.id }));
+        // Send metadata after a short delay to ensure connection is ready
+        setTimeout(() => {
+          console.log('Sending stream metadata:', data.stream.id);
+          ws.send(JSON.stringify({ streamId: data.stream.id }));
+        }, 100);
       };
       
       ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        if (msg.status === 'ready') {
-          console.log('Server ready to receive stream');
-          setStatus(`Streaming! View at: https://zap.stream/${data.nostr.npub}`);
-          setIsStreaming(true);
+        console.log('WebSocket message received:', event.data);
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.status === 'ready') {
+            console.log('Server ready to receive stream');
+            setStatus(`Streaming! View at: https://zap.stream/${data.nostr.npub}`);
+            setIsStreaming(true);
+            
+            // Start sending video data after server is ready
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'inactive') {
+              mediaRecorderRef.current.start(100);
+            }
+          }
+        } catch (e) {
+          console.error('Error parsing WebSocket message:', e);
         }
       };
       
@@ -92,8 +105,8 @@ export default function BrowserStreamPage() {
         }
       };
       
-      // Start recording in chunks
-      mediaRecorder.start(100); // Send data every 100ms
+      // Don't start recording yet - wait for server ready signal
+      // mediaRecorder.start(100); will be called when server sends ready
       
       // Handle stream end
       stream.getTracks()[0].addEventListener('ended', () => {

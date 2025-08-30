@@ -18,52 +18,74 @@ function handleWebSocket(wss) {
     console.log('WebSocket connection established from', req.url);
     let ffmpegProcess = null;
     let streamId = null;
+    let metadataReceived = false;
     
     ws.on('message', (message) => {
       try {
-        // First message is metadata
-        if (!ffmpegProcess && message.toString().startsWith('{')) {
-          const metadata = JSON.parse(message.toString());
-          streamId = metadata.streamId;
-          const rtmpUrl = `rtmp://localhost:1935/live/${streamId}`;
-          
-          console.log(`Starting ffmpeg for browser stream ${streamId}`);
-          
-          // Start ffmpeg to transcode WebM to RTMP
-          ffmpegProcess = spawn('ffmpeg', [
-            '-f', 'webm',
-            '-i', 'pipe:0',
-            '-c:v', 'libx264',
-            '-preset', 'veryfast',
-            '-tune', 'zerolatency',
-            '-c:a', 'aac',
-            '-ar', '44100',
-            '-b:a', '128k',
-            '-f', 'flv',
-            rtmpUrl
-          ], {
-            stdio: ['pipe', 'pipe', 'pipe']
-          });
-          
-          activeStreams.set(streamId, ffmpegProcess);
-          
-          ffmpegProcess.stderr.on('data', (data) => {
-            const output = data.toString();
-            if (!output.includes('frame=')) {
-              console.log(`[Browser ${streamId}]:`, output);
+        // First message should be metadata
+        if (!metadataReceived) {
+          // Try to parse as JSON
+          try {
+            const metadata = JSON.parse(message.toString());
+            if (metadata.streamId) {
+              streamId = metadata.streamId;
+              metadataReceived = true;
+              const rtmpUrl = `rtmp://localhost:1935/live/${streamId}`;
+              
+              console.log(`Starting ffmpeg for browser stream ${streamId}`);
+              
+              // Start ffmpeg to transcode WebM to RTMP
+              ffmpegProcess = spawn('ffmpeg', [
+                '-f', 'webm',
+                '-i', 'pipe:0',
+                '-c:v', 'libx264',
+                '-preset', 'veryfast',
+                '-tune', 'zerolatency',
+                '-c:a', 'aac',
+                '-ar', '44100',
+                '-b:a', '128k',
+                '-f', 'flv',
+                rtmpUrl
+              ], {
+                stdio: ['pipe', 'pipe', 'pipe']
+              });
+              
+              activeStreams.set(streamId, ffmpegProcess);
+              
+              ffmpegProcess.stderr.on('data', (data) => {
+                const output = data.toString();
+                if (!output.includes('frame=')) {
+                  console.log(`[Browser ${streamId}]:`, output);
+                }
+              });
+              
+              ffmpegProcess.on('exit', (code) => {
+                console.log(`[Browser ${streamId}] ffmpeg exited with code ${code}`);
+                activeStreams.delete(streamId);
+              });
+              
+              ffmpegProcess.on('error', (error) => {
+                console.error(`[Browser ${streamId}] ffmpeg error:`, error);
+                activeStreams.delete(streamId);
+              });
+              
+              ws.send(JSON.stringify({ status: 'ready', streamId }));
+              console.log(`Sent ready signal for stream ${streamId}`);
+            } else {
+              console.log('Metadata missing streamId:', metadata);
             }
-          });
-          
-          ffmpegProcess.on('exit', (code) => {
-            console.log(`[Browser ${streamId}] ffmpeg exited with code ${code}`);
-            activeStreams.delete(streamId);
-          });
-          
-          ws.send(JSON.stringify({ status: 'ready', streamId }));
+          } catch (parseError) {
+            console.log('First message is not JSON, might be video data already');
+          }
         }
         // Subsequent messages are video chunks
-        else if (ffmpegProcess && ffmpegProcess.stdin && Buffer.isBuffer(message)) {
-          ffmpegProcess.stdin.write(message);
+        else if (metadataReceived && ffmpegProcess && ffmpegProcess.stdin) {
+          // Handle video data
+          if (Buffer.isBuffer(message) || message instanceof ArrayBuffer) {
+            ffmpegProcess.stdin.write(Buffer.from(message));
+          }
+        } else {
+          console.log('Unexpected message state - metadata:', metadataReceived, 'ffmpeg:', !!ffmpegProcess);
         }
       } catch (error) {
         console.error('WebSocket message error:', error);
