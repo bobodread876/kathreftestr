@@ -17,10 +17,17 @@ RUN apt-get update && apt-get install -y \
 RUN pip3 install --break-system-packages streamlink yt-dlp
 
 # Install MediaMTX
-RUN wget https://github.com/bluenviron/mediamtx/releases/download/v1.14.0/mediamtx_v1.14.0_linux_amd64.tar.gz && \
-    tar -xzf mediamtx_v1.14.0_linux_amd64.tar.gz && \
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "$ARCH" = "amd64" ]; then \
+        wget https://github.com/bluenviron/mediamtx/releases/download/v1.14.0/mediamtx_v1.14.0_linux_amd64.tar.gz && \
+        tar -xzf mediamtx_v1.14.0_linux_amd64.tar.gz; \
+    else \
+        wget https://github.com/bluenviron/mediamtx/releases/download/v1.14.0/mediamtx_v1.14.0_linux_arm64v8.tar.gz && \
+        tar -xzf mediamtx_v1.14.0_linux_arm64v8.tar.gz; \
+    fi && \
+    chmod +x mediamtx && \
     mv mediamtx /usr/local/bin/ && \
-    rm mediamtx_v1.14.0_linux_amd64.tar.gz
+    rm mediamtx_*.tar.gz
 
 WORKDIR /app
 
