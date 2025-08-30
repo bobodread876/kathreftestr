@@ -80,7 +80,6 @@ export function liveEventTemplate(params: LiveEventParams): EventTemplate {
     created_at: now,
     content: "",
     tags,
-    pubkey: params.pkHex,
   };
 
   return evt;
@@ -112,7 +111,6 @@ export function endEventTemplate(params: EndEventParams): EventTemplate {
     created_at: now,
     content: "",
     tags,
-    pubkey: params.pkHex,
   };
   
   return evt;
@@ -146,6 +144,5 @@ export function profileKind0Template(params: ProfileParams): EventTemplate {
     created_at: now,
     content,
     tags: [],
-    pubkey: params.pkHex,
   } as EventTemplate;
 }
