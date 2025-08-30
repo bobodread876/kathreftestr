@@ -12,6 +12,9 @@ hlsAddress: :8888
 hlsAllowOrigin: "*"
 hlsVariant: lowLatency
 
+# Disable WebRTC to avoid port conflicts
+webrtc: no
+
 # Path Configuration
 paths:
   all_others:
