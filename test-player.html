@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HLS Stream Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        video { width: 100%; max-width: 800px; background: black; }
+        input { width: 500px; padding: 5px; }
+        button { padding: 5px 10px; }
+        #status { margin-top: 10px; padding: 10px; background: #f0f0f0; }
+    </style>
+</head>
+<body>
+    <h1>HLS Stream Player</h1>
+    <video id="video" controls></video>
+    <br><br>
+    <input type="text" id="url" placeholder="Enter HLS URL or use default" value="http://localhost:8890/live/b2d496f7/index.m3u8">
+    <button onclick="loadStream()">Load Stream</button>
+    <div id="status"></div>
+    
+    <script>
+        function updateStatus(msg) {
+            document.getElementById('status').innerHTML += msg + '<br>';
+        }
+        
+        function loadStream() {
+            var video = document.getElementById('video');
+            var url = document.getElementById('url').value;
+            
+            updateStatus('Loading: ' + url);
+            
+            // First test if URL is accessible
+            fetch(url)
+                .then(response => {
+                    updateStatus('URL accessible, status: ' + response.status);
+                    if (!response.ok) {
+                        throw new Error('HTTP ' + response.status);
+                    }
+                    return response.text();
+                })
+                .then(text => {
+                    updateStatus('Manifest fetched, first 100 chars: ' + text.substring(0, 100));
+                })
+                .catch(error => {
+                    updateStatus('Fetch error: ' + error);
+                });
+            
+            if (Hls.isSupported()) {
+                var hls = new Hls({
+                    debug: false,
+                    xhrSetup: function(xhr, url) {
+                        // Add header to skip ngrok warning
+                        xhr.setRequestHeader('ngrok-skip-browser-warning', 'true');
+                    }
+                });
+                
+                hls.loadSource(url);
+                hls.attachMedia(video);
+                
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    updateStatus('Manifest parsed, attempting to play...');
+                    video.play().catch(e => updateStatus('Play failed: ' + e));
+                });
+                
+                hls.on(Hls.Events.ERROR, function(event, data) {
+                    updateStatus('Error: ' + data.type + ' - ' + data.details);
+                    console.error('HLS error:', data);
+                });
+                
+                hls.on(Hls.Events.MEDIA_ATTACHED, function() {
+                    updateStatus('Media attached successfully');
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                // For Safari native HLS support
+                video.src = url;
+                video.addEventListener('loadedmetadata', function() {
+                    updateStatus('Metadata loaded, attempting to play...');
+                    video.play().catch(e => updateStatus('Play failed: ' + e));
+                });
+            }
+        }
+        
+        // Auto-load local stream on page load
+        window.onload = function() {
+            if (window.location.hostname === 'localhost') {
+                loadStream();
+            }
+        };
+    </script>
+</body>
+</html>

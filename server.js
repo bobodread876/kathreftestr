@@ -19,12 +19,38 @@ function handleWebSocket(wss) {
     let ffmpegProcess = null;
     let streamId = null;
     let metadataReceived = false;
+    let messageCount = 0;
+    
+    // Send ping to keep connection alive
+    const pingInterval = setInterval(() => {
+      if (ws.readyState === ws.OPEN) {
+        ws.ping();
+      }
+    }, 30000);
     
     // Log connection details
     console.log('WebSocket ready state:', ws.readyState);
+    console.log('Waiting for metadata message...');
+    
+    // Send a test message to client to verify connection works
+    try {
+      ws.send(JSON.stringify({ type: 'test', message: 'Connection established' }));
+      console.log('Test message sent to client');
+    } catch (e) {
+      console.error('Failed to send test message:', e);
+    }
+    
+    // Set a timeout to check if we receive any messages
+    const timeoutId = setTimeout(() => {
+      if (messageCount === 0) {
+        console.log('No messages received after 5 seconds');
+        console.log('WebSocket state at timeout:', ws.readyState);
+      }
+    }, 5000);
     
     ws.on('message', (message) => {
-      console.log('WebSocket message received, type:', typeof message, 'size:', message.length || message.byteLength || 0);
+      messageCount++;
+      console.log(`WebSocket message #${messageCount} received, type:`, typeof message, 'size:', message.length || message.byteLength || 0);
       
       try {
         // First message should be metadata
@@ -80,9 +106,11 @@ function handleWebSocket(wss) {
               
               ffmpegProcess.stderr.on('data', (data) => {
                 const output = data.toString();
-                if (!output.includes('frame=')) {
-                  console.log(`[Browser ${streamId}]:`, output);
-                }
+                console.log(`[Browser ${streamId} ffmpeg]:`, output);
+              });
+              
+              ffmpegProcess.stdin.on('error', (error) => {
+                console.error(`[Browser ${streamId}] stdin error:`, error);
               });
               
               ffmpegProcess.on('exit', (code) => {
@@ -118,12 +146,20 @@ function handleWebSocket(wss) {
       }
     });
     
-    ws.on('error', (error) => {
-      console.error('WebSocket error:', error);
+    ws.on('pong', () => {
+      console.log('Received pong from client');
     });
     
-    ws.on('close', () => {
-      console.log(`WebSocket closed for stream ${streamId}`);
+    ws.on('error', (error) => {
+      console.error('WebSocket error:', error);
+      console.error('Error details:', error.message, error.code);
+    });
+    
+    ws.on('close', (code, reason) => {
+      clearTimeout(timeoutId);
+      clearInterval(pingInterval);
+      console.log(`WebSocket closed with code ${code}, reason: ${reason}`);
+      console.log(`WebSocket closed for stream ${streamId}, received ${messageCount} messages`);
       if (ffmpegProcess) {
         ffmpegProcess.stdin.end();
         ffmpegProcess.kill();
@@ -174,13 +210,44 @@ async function startMediaMTX() {
 app.prepare().then(() => {
   const server = createServer((req, res) => {
     const parsedUrl = parse(req.url, true);
+    
+    // Check for WebSocket upgrade request
+    if (req.headers.upgrade === 'websocket' && parsedUrl.pathname === '/api/ws') {
+      console.log('WebSocket upgrade request detected, will be handled by ws module');
+      // Let the WebSocket server handle this
+      return;
+    }
+    
     handle(req, res, parsedUrl);
   });
   
-  // Create WebSocket server attached to the same HTTP server
+  // Handle WebSocket upgrade manually
+  server.on('upgrade', (request, socket, head) => {
+    const parsedUrl = parse(request.url, true);
+    console.log('Upgrade request for:', parsedUrl.pathname);
+    
+    if (parsedUrl.pathname === '/api/ws') {
+      console.log('Handling WebSocket upgrade for /api/ws');
+      // Prevent socket from being destroyed by Next.js
+      socket.removeAllListeners('error');
+      socket.on('error', (err) => {
+        console.error('Socket error during upgrade:', err);
+      });
+      
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request);
+      });
+    } else if (parsedUrl.pathname.includes('webpack-hmr')) {
+      // Let Next.js handle HMR WebSocket
+      return;
+    } else {
+      socket.destroy();
+    }
+  });
+  
+  // Create WebSocket server (but don't attach to server, we'll handle upgrades manually)
   const wss = new WebSocketServer({ 
-    server,
-    path: '/api/ws'
+    noServer: true
   });
   
   handleWebSocket(wss);

@@ -64,34 +64,54 @@ export default function BrowserStreamPage() {
         videoRef.current.srcObject = stream;
       }
 
-      // Connect to WebSocket server on same port via /api/ws path
+      // Connect to separate WebSocket server on port 8082
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${wsProtocol}//${window.location.host}/api/ws`;
+      const wsHost = window.location.hostname;
+      const wsUrl = `${wsProtocol}//${wsHost}:8082`;
       
       console.log('Connecting to WebSocket:', wsUrl);
       const ws = new WebSocket(wsUrl);
       websocketRef.current = ws;
       
+      // Keep WebSocket alive
+      const keepAliveInterval = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          // Send a ping-like message to keep connection alive
+          console.log('Keeping WebSocket alive');
+        }
+      }, 30000);
+      
       ws.onopen = () => {
-        console.log('WebSocket connected');
-        // Send metadata after a short delay to ensure connection is ready
+        console.log('WebSocket connected, readyState:', ws.readyState);
+        // Add a small delay to ensure connection is stable
         setTimeout(() => {
-          const streamMetadata = { streamId: data.stream.id };
-          console.log('Sending stream metadata:', streamMetadata);
-          try {
-            ws.send(JSON.stringify(streamMetadata));
-            console.log('Metadata sent successfully');
-          } catch (e) {
-            console.error('Error sending metadata:', e);
-            setStatus('Failed to send stream metadata');
+          if (ws.readyState === WebSocket.OPEN) {
+            const streamMetadata = { streamId: data.stream.id };
+            console.log('Sending stream metadata:', streamMetadata);
+            try {
+              ws.send(JSON.stringify(streamMetadata));
+              console.log('Metadata sent successfully');
+            } catch (e) {
+              console.error('Error sending metadata:', e);
+              setStatus('Failed to send stream metadata');
+            }
+          } else {
+            console.error('WebSocket closed before metadata could be sent, state:', ws.readyState);
+            setStatus('WebSocket closed before metadata could be sent');
           }
-        }, 100);
+        }, 2000);
       };
       
       ws.onmessage = (event) => {
         console.log('WebSocket message received:', event.data);
         try {
           const msg = JSON.parse(event.data);
+          console.log('Parsed message:', msg);
+          
+          if (msg.type === 'test') {
+            console.log('Test message from server:', msg.message);
+          }
+          
           if (msg.status === 'ready') {
             console.log('Server ready to receive stream');
             setStatus(`Streaming! View at: https://zap.stream/${data.nostr.npub}`);
@@ -113,9 +133,17 @@ export default function BrowserStreamPage() {
       };
       
       ws.onclose = (event) => {
+        clearInterval(keepAliveInterval);
         console.log('WebSocket closed:', event.code, event.reason);
+        console.log('WebSocket was clean:', event.wasClean);
+        console.log('WebSocket readyState:', ws.readyState);
         if (!event.wasClean) {
           setStatus(`WebSocket closed unexpectedly: ${event.reason || 'Unknown reason'}`);
+        }
+        // Try to stop MediaRecorder if still running
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+          console.log('Stopping MediaRecorder due to WebSocket close');
+          mediaRecorderRef.current.stop();
         }
       };
       
@@ -126,10 +154,28 @@ export default function BrowserStreamPage() {
       });
       mediaRecorderRef.current = mediaRecorder;
       
+      let chunksCount = 0;
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
+          chunksCount++;
+          console.log(`Sending video chunk #${chunksCount}, size: ${event.data.size}`);
           ws.send(event.data);
+        } else if (ws.readyState !== WebSocket.OPEN) {
+          console.log('WebSocket not open, cannot send chunk');
         }
+      };
+      
+      mediaRecorder.onerror = (event) => {
+        console.error('MediaRecorder error:', event);
+        setStatus('MediaRecorder error - check console');
+      };
+      
+      mediaRecorder.onstart = () => {
+        console.log('MediaRecorder started');
+      };
+      
+      mediaRecorder.onstop = () => {
+        console.log('MediaRecorder stopped');
       };
       
       // Don't start recording yet - wait for server ready signal
