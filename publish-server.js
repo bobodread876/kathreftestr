@@ -14,14 +14,34 @@ const RELAYS = [
   'wss://nostr.wine'
 ];
 
-async function publishStream(streamUrl) {
+async function publishStream(streamUrl, options = {}) {
   console.log('Publishing stream:', streamUrl);
   
-  // Generate new keypair
-  const privateKey = generateSecretKey();
-  const publicKey = getPublicKey(privateKey);
-  const nsec = nip19.nsecEncode(privateKey);
-  const npub = nip19.npubEncode(publicKey);
+  let privateKey, publicKey, nsec, npub;
+  
+  // Use provided nsec or generate new keypair
+  if (options.nsec) {
+    console.log('Using provided nsec...');
+    try {
+      const decoded = nip19.decode(options.nsec);
+      if (decoded.type !== 'nsec') {
+        throw new Error('Invalid nsec format');
+      }
+      privateKey = decoded.data;
+      publicKey = getPublicKey(privateKey);
+      nsec = options.nsec;
+      npub = nip19.npubEncode(publicKey);
+    } catch (error) {
+      console.error('Error decoding nsec:', error);
+      process.exit(1);
+    }
+  } else {
+    console.log('Generating new keypair...');
+    privateKey = generateSecretKey();
+    publicKey = getPublicKey(privateKey);
+    nsec = nip19.nsecEncode(privateKey);
+    npub = nip19.npubEncode(publicKey);
+  }
   
   console.log('Generated npub:', npub);
   console.log('Save this nsec to republish updates:', nsec);
@@ -39,9 +59,9 @@ async function publishStream(streamUrl) {
     created_at: Math.floor(Date.now() / 1000),
     tags: [],
     content: JSON.stringify({
-      name: 'Stream Bot',
-      about: 'Automated streaming to Nostr',
-      picture: '',
+      name: options.channelName || 'Stream Bot',
+      about: options.channelName ? `Streaming from ${options.channelName}` : 'Automated streaming to Nostr',
+      picture: options.thumbnail || '',
       lud16: lightningAddress, // Lightning address in profile
       nip05: ''
     })
@@ -65,19 +85,29 @@ async function publishStream(streamUrl) {
   await new Promise(resolve => setTimeout(resolve, 1000));
   
   // Create NIP-53 live event
-  const streamId = 'test-' + Date.now();
+  const streamId = 'stream-' + Date.now();
+  const title = options.title || `Echoes of the Bifröst ${streamId}`;
+  
+  const tags = [
+    ['d', streamId],
+    ['title', title],
+    ['summary', options.summary || 'Live streaming to Nostr via self-hosted infrastructure'],
+    ['streaming', streamUrl],
+    ['status', 'live'],
+    ['starts', Math.floor(Date.now() / 1000).toString()],
+    ['p', publicKey, '', 'Host'], // Mark ourselves as the host
+  ];
+  
+  // Add thumbnail/image tag if provided
+  if (options.thumbnail) {
+    tags.push(['image', options.thumbnail]);
+    console.log('Including thumbnail:', options.thumbnail);
+  }
+  
   const eventTemplate = {
     kind: 30311,
     created_at: Math.floor(Date.now() / 1000),
-    tags: [
-      ['d', streamId],
-      ['title', 'Browser Screen Capture Test'],
-      ['summary', 'Testing browser-based streaming to Nostr via local infrastructure'],
-      ['streaming', streamUrl],
-      ['status', 'live'],
-      ['starts', Math.floor(Date.now() / 1000).toString()],
-      ['p', publicKey, '', 'Host'], // Mark ourselves as the host
-    ],
+    tags: tags,
     content: JSON.stringify({
       url: streamUrl,
       type: 'hls'
@@ -86,6 +116,16 @@ async function publishStream(streamUrl) {
   
   const signedEvent = finalizeEvent(eventTemplate, privateKey);
   console.log('Event ID:', signedEvent.id);
+  
+  // Generate naddr for zap.stream URL
+  const naddrData = {
+    identifier: streamId,
+    pubkey: publicKey,
+    kind: 30311,
+    relays: RELAYS.slice(0, 3) // Use first 3 relays
+  };
+  const naddr = nip19.naddrEncode(naddrData);
+  console.log('Generated naddr:', naddr);
   
   // Publish to relays
   const successes = [];
@@ -159,10 +199,41 @@ async function publishStream(streamUrl) {
   return { npub, nsec, eventId: signedEvent.id, successes, failures };
 }
 
-// Get stream URL from command line or use default
-const streamUrl = process.argv[2] || 'http://localhost:8890/live/3699618f/index.m3u8';
+// Parse command line arguments
+const args = process.argv.slice(2);
+const streamUrl = args[0] || 'http://localhost:8890/live/test/index.m3u8';
 
-publishStream(streamUrl)
+// Parse options from remaining args
+const options = {};
+for (let i = 1; i < args.length; i++) {
+  if (args[i] === '--nsec' && args[i + 1]) {
+    options.nsec = args[i + 1];
+    i++;
+  } else if (args[i] === '--title' && args[i + 1]) {
+    options.title = args[i + 1];
+    i++;
+  } else if (args[i] === '--summary' && args[i + 1]) {
+    options.summary = args[i + 1];
+    i++;
+  } else if (args[i] === '--thumbnail' && args[i + 1]) {
+    options.thumbnail = args[i + 1];
+    i++;
+  } else if (args[i] === '--channelName' && args[i + 1]) {
+    options.channelName = args[i + 1];
+    i++;
+  }
+}
+
+// Show usage if no URL provided
+if (!args[0]) {
+  console.log('Usage: node publish-server.js <stream-url> [--nsec <nsec>] [--title "Stream Title"] [--summary "Description"] [--thumbnail <url>] [--channelName "Channel Name"]');
+  console.log('\nExample:');
+  console.log('  node publish-server.js http://localhost:8890/live/abc123/index.m3u8 --title "My Stream"');
+  console.log('  node publish-server.js http://localhost:8890/live/abc123/index.m3u8 --nsec nsec1... --title "My Stream" --thumbnail https://img.youtube.com/vi/VIDEO_ID/maxresdefault.jpg --channelName "My Channel"');
+  process.exit(1);
+}
+
+publishStream(streamUrl, options)
   .then(result => {
     console.log('\n=== Done ===');
     process.exit(0);

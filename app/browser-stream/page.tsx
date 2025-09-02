@@ -4,14 +4,80 @@ import { useState, useRef, useEffect } from 'react';
 
 export default function BrowserStreamPage() {
   const [streamUrl, setStreamUrl] = useState('');
+  const [streamTitle, setStreamTitle] = useState('');
+  const [userNsec, setUserNsec] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamId, setStreamId] = useState('');
   const [status, setStatus] = useState('');
   const [npub, setNpub] = useState('');
+  const [naddr, setNaddr] = useState('');
+  const [generatedNsec, setGeneratedNsec] = useState('');
+  const [thumbnailUrl, setThumbnailUrl] = useState('');
+  const [youtubeMetadata, setYoutubeMetadata] = useState<any>(null);
+  const [channelName, setChannelName] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const websocketRef = useRef<WebSocket | null>(null);
+
+  // Extract YouTube video ID and generate thumbnail URL
+  const extractYouTubeThumbnail = (url: string) => {
+    if (!url) return null;
+    
+    // Extract video ID from various YouTube URL formats
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([^#&?]*)/,
+    ];
+    
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match && match[1]) {
+        const videoId = match[1];
+        // Use high quality thumbnail
+        return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+      }
+    }
+    
+    return null;
+  };
+
+  // Fetch YouTube metadata when URL changes
+  useEffect(() => {
+    if (!streamUrl) return;
+    
+    const fetchMetadata = async () => {
+      try {
+        const response = await fetch('/api/youtube-metadata', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: streamUrl })
+        });
+        
+        if (response.ok) {
+          const metadata = await response.json();
+          console.log('Fetched YouTube metadata:', metadata);
+          
+          setYoutubeMetadata(metadata);
+          setThumbnailUrl(metadata.thumbnail);
+          setChannelName(metadata.channelName);
+          
+          // Auto-populate title if not already set
+          if (!streamTitle && metadata.title) {
+            setStreamTitle(metadata.title);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching YouTube metadata:', error);
+        // Fall back to just extracting thumbnail
+        const thumbnail = extractYouTubeThumbnail(streamUrl);
+        if (thumbnail) {
+          setThumbnailUrl(thumbnail);
+        }
+      }
+    };
+    
+    fetchMetadata();
+  }, [streamUrl]);
 
   const startBrowserStream = async () => {
     try {
@@ -86,11 +152,23 @@ export default function BrowserStreamPage() {
         // Add a small delay to ensure connection is stable
         setTimeout(() => {
           if (ws.readyState === WebSocket.OPEN) {
-            const streamMetadata = { streamId: data.stream.id };
+            const streamMetadata = { 
+              streamId: data.stream.id,
+              title: streamTitle || `Echoes of the Bifröst ${data.stream.id}`,
+              nsec: userNsec || '',
+              thumbnail: thumbnailUrl || '',
+              channelName: channelName || '',
+              summary: youtubeMetadata?.title ? `Streaming: ${youtubeMetadata.title}` : ''
+            };
             console.log('Sending stream metadata:', streamMetadata);
             try {
               ws.send(JSON.stringify(streamMetadata));
               console.log('Metadata sent successfully');
+              
+              // Store generated nsec if new identity was created and no user nsec provided
+              if (!userNsec && data.nostr?.nsec) {
+                setGeneratedNsec(data.nostr.nsec);
+              }
             } catch (e) {
               console.error('Error sending metadata:', e);
               setStatus('Failed to send stream metadata');
@@ -112,9 +190,24 @@ export default function BrowserStreamPage() {
             console.log('Test message from server:', msg.message);
           }
           
+          if (msg.type === 'nostr-info') {
+            console.log('Received Nostr info:', msg);
+            if (msg.npub) {
+              setNpub(msg.npub);
+            }
+            if (msg.naddr) {
+              setNaddr(msg.naddr);
+              console.log('Stored naddr for zap.stream:', msg.naddr);
+            }
+            if (msg.nsec && !userNsec) {
+              setGeneratedNsec(msg.nsec);
+              console.log('Stored generated nsec:', msg.nsec);
+            }
+          }
+          
           if (msg.status === 'ready') {
             console.log('Server ready to receive stream');
-            setStatus(`Streaming! View at: https://zap.stream/${data.nostr.npub}`);
+            setStatus(`Streaming! View at: https://zap.stream/${npub || data.nostr?.npub}`);
             setIsStreaming(true);
             
             // Start sending video data after server is ready
@@ -234,6 +327,8 @@ export default function BrowserStreamPage() {
     setStatus('Stream stopped');
     setStreamId('');
     setNpub('');
+    setNaddr('');
+    setGeneratedNsec('');
   };
 
   return (
@@ -249,7 +344,41 @@ export default function BrowserStreamPage() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-2">
-                YouTube/Twitch URL (for metadata)
+                Stream Title (optional)
+              </label>
+              <input
+                type="text"
+                value={streamTitle}
+                onChange={(e) => setStreamTitle(e.target.value)}
+                placeholder="Echoes of the Bifröst"
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg"
+                disabled={isStreaming}
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Leave empty for default: "Echoes of the Bifröst [Stream ID]"
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Your Nostr nsec (optional - for persistent identity)
+              </label>
+              <input
+                type="password"
+                value={userNsec}
+                onChange={(e) => setUserNsec(e.target.value)}
+                placeholder="nsec1..."
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg"
+                disabled={isStreaming}
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Leave empty to generate a new identity for this stream
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                YouTube/Twitch URL (for thumbnail)
               </label>
               <input
                 type="url"
@@ -259,6 +388,29 @@ export default function BrowserStreamPage() {
                 className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg"
                 disabled={isStreaming}
               />
+              {(thumbnailUrl || channelName) && (
+                <div className="mt-2 space-y-2">
+                  {channelName && (
+                    <div>
+                      <p className="text-xs text-gray-400">Channel: <span className="text-gray-300">{channelName}</span></p>
+                    </div>
+                  )}
+                  {thumbnailUrl && (
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">Thumbnail preview:</p>
+                      <img 
+                        src={thumbnailUrl} 
+                        alt="Stream thumbnail" 
+                        className="w-32 h-auto rounded"
+                        onError={(e) => {
+                          console.log('Thumbnail failed to load, trying default quality');
+                          e.currentTarget.src = thumbnailUrl.replace('maxresdefault', 'hqdefault');
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex gap-4">
@@ -303,17 +455,52 @@ export default function BrowserStreamPage() {
           <div className="mt-6 p-4 bg-green-900 rounded-lg">
             <p className="font-semibold">Stream is Live!</p>
             <p className="text-sm mt-2">Stream ID: {streamId}</p>
+            <p className="text-sm mt-1">Title: {streamTitle || `Echoes of the Bifröst ${streamId}`}</p>
             {npub && (
               <div className="mt-3">
-                <p className="text-sm mb-2">View your stream on zap.stream:</p>
-                <a 
-                  href={`https://zap.stream/${npub}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-block px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-semibold"
-                >
-                  Open on zap.stream →
-                </a>
+                <p className="text-sm mb-2">Your npub: {npub}</p>
+                {generatedNsec && !userNsec && (
+                  <div className="mt-2 p-3 bg-yellow-900 rounded">
+                    <p className="text-xs font-semibold mb-1">⚠️ Save this nsec (private key) to reuse this identity:</p>
+                    <code className="text-xs break-all">{generatedNsec}</code>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(generatedNsec)}
+                      className="mt-2 px-3 py-1 bg-yellow-700 hover:bg-yellow-600 rounded text-xs"
+                    >
+                      Copy nsec
+                    </button>
+                  </div>
+                )}
+                <p className="text-sm mb-2 mt-3">View your stream on Nostr:</p>
+                <div className="space-y-2">
+                  <div className="flex gap-2 flex-wrap">
+                    <a 
+                      href="https://zap.stream"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-semibold"
+                    >
+                      zap.stream
+                    </a>
+                    <a 
+                      href="https://nostrudel.ninja/#/streams"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-semibold"
+                    >
+                      Nostrudel
+                    </a>
+                    <a 
+                      href="/nostr-viewer"
+                      className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg text-sm font-semibold"
+                    >
+                      Local Viewer
+                    </a>
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    Look for "{streamTitle || `Echoes of the Bifröst ${streamId}`}" in the live streams
+                  </p>
+                </div>
               </div>
             )}
           </div>
