@@ -4,15 +4,15 @@
 
 ### Linux/macOS
 ```bash
-curl -sSL https://raw.githubusercontent.com/islandbitcoin/kathreftestr/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/islandbitcoin/kathreftestr/main/scripts/install.sh | bash
 ```
 
 Or clone and run locally:
 ```bash
 git clone https://github.com/islandbitcoin/kathreftestr.git
 cd kathreftestr
-chmod +x install.sh
-./install.sh
+chmod +x scripts/install.sh
+./scripts/install.sh
 ```
 
 ---
@@ -118,7 +118,7 @@ git push heroku main
 #### Quick Install
 ```bash
 # Run the one-click installer
-curl -sSL https://raw.githubusercontent.com/islandbitcoin/kathreftestr/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/islandbitcoin/kathreftestr/main/scripts/install.sh | bash
 ```
 
 #### Manual Install
