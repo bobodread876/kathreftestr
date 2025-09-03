@@ -23,7 +23,7 @@ async function verifyOwnership(nsec: string, npub: string): Promise<boolean> {
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<Response> {
   try {
     const { url, title, nsec, action } = await request.json();
     
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
       thumbnail: ''
     };
     
-    return new Promise((resolve) => {
+    return new Promise<Response>((resolve) => {
       let dataCollected = false;
       const timeout = setTimeout(() => {
         if (!dataCollected) {

@@ -198,11 +198,12 @@ Use this nsec in the "Persistent npub" field
     let nsecToUse = userNsec || generatedNsec;
     
     if (!nsecToUse) {
-      nsecToUse = prompt('Enter your nsec to stop the stream:');
-      if (!nsecToUse) {
+      const promptResult = prompt('Enter your nsec to stop the stream:');
+      if (!promptResult) {
         setStatus("Authentication required to stop stream");
         return;
       }
+      nsecToUse = promptResult;
     }
     
     try {
@@ -414,11 +415,12 @@ Use this nsec in the "Persistent npub" field
     let nsecToUse = userNsec || generatedNsec;
     
     if (!nsecToUse) {
-      nsecToUse = prompt('Enter your nsec to stop the stream:');
-      if (!nsecToUse) {
+      const promptResult = prompt('Enter your nsec to stop the stream:');
+      if (!promptResult) {
         setStatus("Authentication required to stop stream");
         return;
       }
+      nsecToUse = promptResult;
     }
     
     try {
