@@ -2,6 +2,7 @@ const StreamExtractor = require('./stream-extractor');
 const path = require('path');
 const { spawn } = require('child_process');
 const streamState = require('./stream-state');
+const proxyConfig = require('./utils/proxy-config');
 
 /**
  * Unified Stream Manager
@@ -73,7 +74,23 @@ class UnifiedStreamManager {
         }
       } catch (error) {
         console.log('Server streaming not available for this URL:', error.message);
-        analysis.reasons.push('Server extraction failed - use browser method');
+        
+        // Check if it's a geo-blocking or IP restriction issue
+        if (error.message.includes('429') || error.message.includes('403') || 
+            error.message.includes('geo') || error.message.includes('blocked') ||
+            error.message.includes('ERROR: Unable to extract uploader id')) {
+          analysis.reasons.push('Server extraction blocked (likely IP restriction) - falling back to browser method');
+          analysis.requiresProxy = true;
+        } else {
+          analysis.reasons.push('Server extraction failed - use browser method');
+        }
+        
+        // If auto-fallback is enabled, automatically use browser method
+        if (proxyConfig.config.autoFallback) {
+          analysis.browserSupported = true;
+          analysis.recommendedMethod = 'browser';
+          console.log('Auto-fallback to browser method enabled');
+        }
       }
     } else {
       analysis.reasons.push('Server streaming tools not installed');

@@ -2,6 +2,7 @@ const { spawn } = require('child_process');
 const EventEmitter = require('events');
 const path = require('path');
 const fs = require('fs');
+const proxyConfig = require('./utils/proxy-config');
 
 /**
  * Modern stream extractor using yt-dlp and streamlink
@@ -69,11 +70,14 @@ class StreamExtractor extends EventEmitter {
    */
   async extractMetadata(url) {
     try {
-      const output = await this.runCommand('yt-dlp', [
+      const args = [
         '--dump-json',
         '--no-playlist',
+        ...proxyConfig.getYtDlpArgs(),
         url
-      ]);
+      ];
+      
+      const output = await this.runCommand('yt-dlp', args);
 
       const metadata = JSON.parse(output);
       
@@ -150,13 +154,18 @@ class StreamExtractor extends EventEmitter {
   async startYtDlpStream(url, rtmpUrl, options) {
     console.log('Starting stream with yt-dlp...');
 
-    // First get the best stream URL
-    const streamUrl = await this.runCommand('yt-dlp', [
+    // First get the best stream URL with proxy support
+    const ytdlpArgs = [
       '-f', 'best[ext=mp4]/best',
       '--get-url',
       '--no-playlist',
+      ...proxyConfig.getYtDlpArgs(),
       url
-    ]);
+    ];
+    
+    const streamUrl = await this.runCommand('yt-dlp', ytdlpArgs, {
+      env: proxyConfig.getEnvironment()
+    });
 
     // Use ffmpeg to re-stream to RTMP
     const ffmpegArgs = [
@@ -201,12 +210,15 @@ class StreamExtractor extends EventEmitter {
     console.log('Starting stream with streamlink...');
 
     const streamlinkArgs = [
+      ...proxyConfig.getStreamlinkArgs(),
       url,
       'best', // Quality
       '-O' // Output to stdout
     ];
 
-    const streamlink = spawn('streamlink', streamlinkArgs);
+    const streamlink = spawn('streamlink', streamlinkArgs, {
+      env: proxyConfig.getEnvironment()
+    });
 
     // Pipe through ffmpeg to RTMP
     const ffmpegCmd = this.ffmpegPath || 'ffmpeg';
@@ -322,19 +334,26 @@ class StreamExtractor extends EventEmitter {
   /**
    * Helper to run commands and get output
    */
-  runCommand(command, args) {
+  runCommand(command, args, options = {}) {
     return new Promise((resolve, reject) => {
-      const proc = spawn(command, args);
+      const spawnOptions = {
+        ...options
+      };
+      const proc = spawn(command, args, spawnOptions);
       let output = '';
       let error = '';
 
-      proc.stdout.on('data', (data) => {
-        output += data.toString();
-      });
+      if (proc.stdout) {
+        proc.stdout.on('data', (data) => {
+          output += data.toString();
+        });
+      }
 
-      proc.stderr.on('data', (data) => {
-        error += data.toString();
-      });
+      if (proc.stderr) {
+        proc.stderr.on('data', (data) => {
+          error += data.toString();
+        });
+      }
 
       proc.on('exit', (code) => {
         if (code === 0) {

@@ -30,7 +30,8 @@ RUN apk add --no-cache \
     curl \
     bash \
     wget \
-    ca-certificates
+    ca-certificates \
+    tor
 
 # Install Python packages
 RUN pip3 install --no-cache-dir --break-system-packages \
@@ -82,12 +83,23 @@ curl -f http://localhost:3000/api/health || exit 1
 EOF
 RUN chmod +x /healthcheck.sh
 
+# Configure Tor (optional)
+RUN echo "SocksPort 0.0.0.0:9050" > /etc/tor/torrc && \
+    echo "ExitPolicy reject *:*" >> /etc/tor/torrc
+
 # Startup script
 COPY <<'EOF' /start.sh
 #!/bin/sh
 set -e
 
 echo "🚀 Starting Kathreftestr..."
+
+# Start Tor if proxy is enabled
+if [ "$PROXY_TYPE" = "tor" ]; then
+    echo "🧅 Starting Tor proxy..."
+    tor -f /etc/tor/torrc &
+    sleep 5
+fi
 
 # Update yt-dlp on startup
 echo "📦 Updating yt-dlp..."
