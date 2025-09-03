@@ -91,7 +91,7 @@ async function publishStream(streamUrl, options = {}) {
   const tags = [
     ['d', streamId],
     ['title', title],
-    ['summary', options.summary || 'Live streaming to Nostr via self-hosted infrastructure'],
+    ['summary', options.summary || `Live streaming to Nostr via self-hosted infrastructure. Zap this creator if you want to see them stream more on NOSTR! To see the original stream, please visit: ${options.originalUrl || ''}`],
     ['streaming', streamUrl],
     ['status', 'live'],
     ['starts', Math.floor(Date.now() / 1000).toString()],
@@ -220,6 +220,9 @@ for (let i = 1; i < args.length; i++) {
     i++;
   } else if (args[i] === '--channelName' && args[i + 1]) {
     options.channelName = args[i + 1];
+    i++;
+  } else if (args[i] === '--originalUrl' && args[i + 1]) {
+    options.originalUrl = args[i + 1];
     i++;
   }
 }
