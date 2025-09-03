@@ -1,146 +1,482 @@
-# Deployment Guide - Render
+# Deployment Guide
 
-## Quick Deploy to Render
+## 🚀 Quick Start (One-Click Install)
+
+### Linux/macOS
+```bash
+curl -sSL https://raw.githubusercontent.com/islandbitcoin/kathreftestr/main/install.sh | bash
+```
+
+Or clone and run locally:
+```bash
+git clone https://github.com/islandbitcoin/kathreftestr.git
+cd kathreftestr
+chmod +x install.sh
+./install.sh
+```
+
+---
+
+## 📦 Manual Docker Installation
 
 ### Prerequisites
-- GitHub account
-- Render account (free tier works)
-- Your code pushed to a GitHub repository
+- Docker 20.10+
+- Docker Compose v2.0+
+- 2GB RAM minimum
+- 10GB disk space
 
-### Step 1: Prepare Your Repository
+### Steps
 
-1. Commit all changes:
+1. **Clone the repository:**
 ```bash
-git add .
-git commit -m "Add Render deployment configuration"
-git push origin main
+git clone https://github.com/islandbitcoin/kathreftestr.git
+cd kathreftestr
 ```
 
-### Step 2: Deploy to Render
+2. **Create environment file:**
+```bash
+cat > .env << EOF
+NODE_ENV=production
+APP_URL=http://localhost:3000
+WS_URL=ws://localhost:8082
+RTMP_URL=rtmp://localhost:1935
+HLS_URL=http://localhost:8890
+EOF
+```
 
-#### Option A: Blueprint Deployment (Recommended)
-1. Click the Deploy to Render button:
-   [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+3. **Build and start:**
+```bash
+docker compose up -d
+```
 
+4. **Verify installation:**
+```bash
+curl http://localhost:3000/api/health
+```
+
+---
+
+## ☁️ Cloud Deployments
+
+### Render
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/islandbitcoin/kathreftestr)
+
+1. Click the button above
 2. Connect your GitHub repository
-3. Render will automatically detect the `render.yaml` file
-4. Click "Apply" to create the service
-
-#### Option B: Manual Deployment
-1. Go to [Render Dashboard](https://dashboard.render.com)
-2. Click "New +" → "Web Service"
-3. Connect your GitHub repository
-4. Configure:
-   - **Name**: `nostr-stream-bridge`
-   - **Runtime**: Docker
-   - **Plan**: Free
-   - **Docker Path**: `./Dockerfile.render`
-5. Add environment variables:
+3. Configure environment variables:
    ```
-   PORT=10000
    NODE_ENV=production
-   NOSTR_RELAYS=wss://relay.damus.io,wss://relay.snort.social,wss://relay.primal.net
-   DEFAULT_THUMB=https://placehold.co/1200x630?text=Nostr+Live
-   RETURN_NSEC=false
-   LIGHTNING_DOMAIN=npub.cash
+   PORT=10000
    ```
+4. Deploy (takes ~10 minutes)
 
-### Step 3: Configure After Deployment
+### DigitalOcean App Platform
+[![Deploy to DigitalOcean](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/islandbitcoin/kathreftestr/tree/main)
 
-1. Once deployed, get your Render URL:
-   - It will be something like: `https://nostr-stream-bridge-xxx.onrender.com`
-
-2. Update the HLS_BASE environment variable:
-   - Go to your service's Environment tab
-   - Add/Update:
-     ```
-     HLS_BASE=https://nostr-stream-bridge-xxx.onrender.com/api/hls
-     ```
-   - Save and let the service redeploy
-
-### Step 4: Test Your Deployment
-
-1. Visit your Render URL: `https://nostr-stream-bridge-xxx.onrender.com`
-2. Enter a YouTube/Twitch stream URL
-3. Click "Start Mirror"
-4. Your stream should now be:
-   - Publishing to Nostr relays
-   - Viewable on zap.stream
-   - Accepting Lightning zaps
-
-## Important Notes
-
-### Free Tier Limitations
-- Render free tier spins down after 15 minutes of inactivity
-- First request after spin-down takes ~30 seconds
-- Limited to 750 hours/month
-- Consider upgrading for production use
-
-### Production Considerations
-
-1. **Upgrade to Paid Tier** ($7/month):
-   - No spin-downs
-   - Better performance
-   - Custom domains
-
-2. **Add Custom Domain**:
-   - Dashboard → Settings → Custom Domains
-   - Add your domain and configure DNS
-
-3. **Environment Variables for Production**:
-   ```
-   RETURN_NSEC=false  # NEVER set to true in production
-   HLS_BASE=https://yourdomain.com/api/hls
-   ```
-
-4. **Monitoring**:
-   - Set up health checks in Render dashboard
-   - Monitor logs for streaming issues
-
-## Troubleshooting
-
-### Stream Not Working?
-1. Check Render logs for errors
-2. Verify HLS_BASE is set correctly
-3. Ensure ffmpeg and yt-dlp installed correctly (check build logs)
-
-### Can't See Stream on zap.stream?
-1. Verify the stream is actually running (check logs)
-2. Make sure HLS_BASE uses HTTPS and is publicly accessible
-3. Check that Nostr events are publishing (look for "Published to relays" in logs)
-
-### Performance Issues?
-1. Upgrade to paid tier
-2. Consider using a CDN for HLS delivery
-3. Use a dedicated VPS for better control
-
-## Alternative Deployment Options
-
-### Railway
-```bash
-railway login
-railway up
-```
-
-### VPS Deployment (DigitalOcean/Hetzner)
-1. Create a $5-10/month VPS
-2. Install Docker
-3. Clone repository
-4. Run:
-   ```bash
-   docker build -f Dockerfile.render -t nostr-bridge .
-   docker run -p 80:10000 -p 1935:1935 --env-file .env.production nostr-bridge
-   ```
+1. Click the button above
+2. Configure app settings
+3. Set environment variables
+4. Deploy
 
 ### Fly.io
 ```bash
+# Install flyctl
+curl -L https://fly.io/install.sh | sh
+
+# Deploy
 fly launch
-fly secrets set HLS_BASE=https://yourapp.fly.dev/api/hls
+fly secrets set NODE_ENV=production
 fly deploy
 ```
 
-## Support
+### Railway
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/islandbitcoin/kathreftestr)
 
-- GitHub Issues: [Report bugs](https://github.com/yourusername/nostr-stream-bridge/issues)
-- Nostr: Find us on Nostr protocol
-- Lightning: Send zaps to support development
+1. Click the button above
+2. Configure environment variables
+3. Deploy automatically
+
+### Heroku
+```bash
+# Create app
+heroku create your-app-name
+
+# Add buildpacks
+heroku buildpacks:add heroku/nodejs
+heroku buildpacks:add https://github.com/jonathanong/heroku-buildpack-ffmpeg-latest.git
+
+# Deploy
+git push heroku main
+```
+
+---
+
+## 🏠 Self-Hosted Deployments
+
+### VPS Setup (Ubuntu/Debian)
+
+#### Quick Install
+```bash
+# Run the one-click installer
+curl -sSL https://raw.githubusercontent.com/islandbitcoin/kathreftestr/main/install.sh | bash
+```
+
+#### Manual Install
+```bash
+# Update system
+sudo apt update && sudo apt upgrade -y
+
+# Install Docker
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+
+# Install Docker Compose
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+
+# Clone repository
+git clone https://github.com/islandbitcoin/kathreftestr.git
+cd kathreftestr
+
+# Start services
+docker compose up -d
+```
+
+### Umbrel App Store
+```bash
+# SSH into your Umbrel
+ssh umbrel@umbrel.local
+
+# Install Kathreftestr
+cd ~/umbrel/app-data
+git clone https://github.com/islandbitcoin/kathreftestr.git
+cd kathreftestr
+docker compose -f docker-compose.umbrel.yml up -d
+```
+
+### Start9
+Coming soon! Track progress at [#start9-support](https://github.com/islandbitcoin/kathreftestr/issues)
+
+---
+
+## 🔧 Configuration
+
+### Environment Variables
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `NODE_ENV` | Environment mode | `production` | Yes |
+| `APP_URL` | Application URL | `http://localhost:3000` | Yes |
+| `WS_URL` | WebSocket URL | `ws://localhost:8082` | Yes |
+| `RTMP_URL` | RTMP server URL | `rtmp://localhost:1935` | Yes |
+| `HLS_URL` | HLS streaming URL | `http://localhost:8890` | Yes |
+| `REDIS_URL` | Redis connection (optional) | - | No |
+| `REDIS_PASSWORD` | Redis password | - | No |
+
+### Port Configuration
+
+| Port | Service | Description | Protocol |
+|------|---------|-------------|----------|
+| 3000 | Next.js | Web application | HTTP |
+| 8082 | WebSocket | Real-time communication | WS |
+| 1935 | RTMP | Stream ingestion | RTMP |
+| 8890 | HLS | Stream output | HTTP |
+| 8888 | MediaMTX API | Stream management | HTTP |
+| 8889 | WebRTC | Peer connections | UDP |
+
+---
+
+## 🔒 Production Security
+
+### SSL/HTTPS Setup with Caddy (Easiest)
+
+1. **Install Caddy:**
+```bash
+# Create Caddyfile
+cat > Caddyfile << EOF
+yourdomain.com {
+    reverse_proxy localhost:3000
+}
+
+yourdomain.com:8082 {
+    reverse_proxy localhost:8082
+}
+EOF
+
+# Run Caddy
+docker run -d \
+  --name caddy \
+  --restart unless-stopped \
+  -p 80:80 \
+  -p 443:443 \
+  -v $(pwd)/Caddyfile:/etc/caddy/Caddyfile \
+  -v caddy_data:/data \
+  caddy:alpine
+```
+
+### SSL with Nginx
+
+1. **Install Certbot:**
+```bash
+sudo apt install certbot python3-certbot-nginx
+```
+
+2. **Configure Nginx:**
+```nginx
+server {
+    server_name yourdomain.com;
+    
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+    
+    location /ws {
+        proxy_pass http://localhost:8082;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        proxy_set_header Host $host;
+    }
+    
+    location /live {
+        proxy_pass http://localhost:8890;
+        proxy_http_version 1.1;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+3. **Get SSL certificate:**
+```bash
+sudo certbot --nginx -d yourdomain.com
+```
+
+### Firewall Configuration
+
+```bash
+# UFW (Ubuntu)
+sudo ufw allow 22/tcp    # SSH
+sudo ufw allow 80/tcp    # HTTP
+sudo ufw allow 443/tcp   # HTTPS
+sudo ufw allow 1935/tcp  # RTMP
+sudo ufw allow 8890/tcp  # HLS
+sudo ufw enable
+```
+
+---
+
+## 📊 Monitoring & Maintenance
+
+### Health Monitoring
+
+```bash
+# Check service health
+curl http://localhost:3000/api/health
+
+# Monitor with watch
+watch -n 5 'curl -s localhost:3000/api/health | jq .'
+```
+
+### Log Management
+
+```bash
+# View all logs
+docker compose logs -f
+
+# View specific service
+docker compose logs -f kathreftestr
+
+# Export logs
+docker compose logs > kathreftestr-$(date +%Y%m%d).log
+
+# Log rotation (add to docker-compose.yml)
+logging:
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "5"
+```
+
+### Performance Monitoring
+
+```bash
+# Container stats
+docker stats kathreftestr
+
+# System resources
+htop
+
+# Disk usage
+df -h
+docker system df
+```
+
+### Backup & Restore
+
+```bash
+# Backup data
+tar czf kathreftestr-backup-$(date +%Y%m%d).tar.gz data/ logs/
+
+# Restore data
+tar xzf kathreftestr-backup-20240101.tar.gz
+
+# Backup Docker volumes
+docker run --rm -v kathreftestr_data:/data -v $(pwd):/backup alpine tar czf /backup/data-backup.tar.gz /data
+```
+
+---
+
+## 🔄 Updates & Upgrades
+
+### Docker Update
+```bash
+# Pull latest images
+docker compose pull
+
+# Restart with new images
+docker compose up -d
+
+# Clean old images
+docker image prune -a
+```
+
+### Git Update
+```bash
+# Backup first
+cp -r data data.backup
+
+# Update code
+git pull origin main
+
+# Rebuild and restart
+docker compose down
+docker compose up -d --build
+```
+
+### Zero-Downtime Update
+```bash
+# Build new image
+docker compose build
+
+# Start new container
+docker compose up -d --no-deps --build kathreftestr
+
+# Verify health
+curl localhost:3000/api/health
+
+# Remove old container
+docker compose rm -f -s kathreftestr.old
+```
+
+---
+
+## 🛠️ Troubleshooting
+
+### Common Issues
+
+#### Ports Already in Use
+```bash
+# Find process using port
+sudo lsof -i :3000
+sudo kill -9 <PID>
+
+# Or change ports in .env
+PORT=3001
+```
+
+#### Stream Not Working
+```bash
+# Check MediaMTX
+curl http://localhost:8888/v3/config/get
+
+# Test RTMP
+ffmpeg -re -i test.mp4 -c copy -f flv rtmp://localhost:1935/live/test
+
+# Verify HLS
+curl http://localhost:8890/live/test/index.m3u8
+```
+
+#### High Memory Usage
+```bash
+# Add to docker-compose.yml
+deploy:
+  resources:
+    limits:
+      cpus: '2.0'
+      memory: 2G
+    reservations:
+      cpus: '0.5'
+      memory: 512M
+```
+
+#### Container Crashes
+```bash
+# Check logs
+docker compose logs --tail=100 kathreftestr
+
+# Restart with verbose logging
+docker compose down
+DEBUG=* docker compose up
+```
+
+---
+
+## 🚀 Performance Optimization
+
+### CDN Setup (Cloudflare)
+1. Add your domain to Cloudflare
+2. Enable proxy for A records
+3. Set SSL mode to "Full (strict)"
+4. Add page rules for streaming paths
+
+### Redis Caching
+```yaml
+# docker-compose.yml
+services:
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+```
+
+### System Tuning
+```bash
+# Increase file limits
+echo "* soft nofile 65536" | sudo tee -a /etc/security/limits.conf
+echo "* hard nofile 65536" | sudo tee -a /etc/security/limits.conf
+
+# Network optimization
+sudo sysctl -w net.core.rmem_max=26214400
+sudo sysctl -w net.core.rmem_default=26214400
+```
+
+---
+
+## 📋 Production Checklist
+
+- [ ] SSL certificates installed
+- [ ] Firewall configured
+- [ ] Backup strategy implemented
+- [ ] Monitoring setup (Uptime Kuma, etc.)
+- [ ] Log rotation configured
+- [ ] Resource limits set
+- [ ] Auto-restart enabled
+- [ ] Security updates scheduled
+- [ ] Documentation updated
+
+---
+
+## 🆘 Support
+
+- 📖 [Documentation](https://github.com/islandbitcoin/kathreftestr/wiki)
+- 🐛 [Issues](https://github.com/islandbitcoin/kathreftestr/issues)
+- 💬 [Discussions](https://github.com/islandbitcoin/kathreftestr/discussions)
+- 📧 Email: support@kathreftestr.com
+
+---
+
+*Last updated: September 2025*
