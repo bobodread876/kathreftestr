@@ -33,10 +33,16 @@ export function startMirror(options: MirrorOptions): MirrorResult {
   const id = options.streamId || crypto.randomUUID().slice(0, 8);
   const rtmpBase = process.env.RTMP_URL || "rtmp://localhost:1935/live";
   
-  // In production, use the public URL for HLS
-  const defaultHlsBase = process.env.NODE_ENV === 'production' 
+  // HLS is served through the Next app's /live proxy (app/live/[...path]/route.ts),
+  // which forwards MediaMTX (:8888) on the app's own origin WITH CORS headers —
+  // required so Nostr clients (zap.stream etc.) can fetch the playlist
+  // cross-origin. Dev mirrors production: same-origin /live, not MediaMTX direct.
+  // (Was http://localhost:8890 — a port nothing listens on, so every published
+  // event linked a dead stream.) Override with HLS_BASE for non-default ports.
+  const port = process.env.PORT || "3000";
+  const defaultHlsBase = process.env.NODE_ENV === 'production'
     ? "https://kathreftestr.onrender.com/live"
-    : "http://localhost:8890/live";
+    : `http://localhost:${port}/live`;
   const hlsBase = process.env.HLS_BASE || defaultHlsBase;
   const quality = options.quality || "best";
   

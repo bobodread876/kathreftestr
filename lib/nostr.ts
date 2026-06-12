@@ -3,10 +3,23 @@ import { EventTemplate, finalizeEvent, Event } from "nostr-tools/pure";
 import * as nip19 from "nostr-tools/nip19";
 import { hexToBytes } from "@noble/hashes/utils";
 
-const RELAYS = (process.env.NOSTR_RELAYS || "")
-  .split(",")
-  .map(s => s.trim())
-  .filter(Boolean);
+// Sensible defaults so a fresh install publishes to Nostr out of the box —
+// without NOSTR_RELAYS set, the mirror would silently reach zero relays (the
+// "to Nostr" half of "YouTube to Nostr" would never happen). Override via env.
+const DEFAULT_RELAYS = [
+  "wss://relay.islandbitcoin.com",
+  "wss://relay.damus.io",
+  "wss://nos.lol",
+  "wss://relay.primal.net",
+];
+
+export const RELAYS = (() => {
+  const fromEnv = (process.env.NOSTR_RELAYS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return fromEnv.length ? fromEnv : DEFAULT_RELAYS;
+})();
 
 export type PublishResult = { id: string; relays: string[] };
 
@@ -17,27 +30,23 @@ export async function publishEvent(
   const pool = new SimplePool();
   const skBytes = hexToBytes(skHex);
   const signed = finalizeEvent(evt, skBytes);
-  
+
+  // SimplePool.publish returns one promise per relay — await them so the
+  // reported relay list reflects relays that actually accepted the event,
+  // not just relays we attempted.
   const successRelays: string[] = [];
-  
-  await Promise.allSettled(
-    RELAYS.map(async (relay) => {
-      try {
-        await pool.publish([relay], signed);
-        successRelays.push(relay);
-      } catch (e) {
-        console.error(`Failed to publish to ${relay}:`, e);
-      }
-    })
-  );
-  
-  // Close connections properly
+  const results = await Promise.allSettled(pool.publish(RELAYS, signed));
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") successRelays.push(RELAYS[i]);
+    else console.error(`Failed to publish to ${RELAYS[i]}:`, r.reason);
+  });
+
   try {
-    await pool.close(RELAYS);
-  } catch (e) {
-    // Ignore close errors
+    pool.close(RELAYS);
+  } catch {
+    // ignore close errors
   }
-  
+
   return { id: signed.id!, relays: successRelays };
 }
 
@@ -70,9 +79,9 @@ export function liveEventTemplate(params: LiveEventParams): EventTemplate {
     tags.push(["zap", params.zapPubkeyHex, "wss://relay.damus.io", "1"]);
   }
   
-  if (process.env.NOSTR_RELAYS) {
-    const relayList = process.env.NOSTR_RELAYS.split(",").map(s => s.trim());
-    tags.push(["relays", ...relayList]);
+  // Advertise where the event lives (NIP-53), using the resolved relay set.
+  if (RELAYS.length) {
+    tags.push(["relays", ...RELAYS]);
   }
 
   const evt: EventTemplate = {

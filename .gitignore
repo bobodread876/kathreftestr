@@ -137,3 +137,16 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# OS / editor junk
+.DS_Store
+*.part
+
+# secrets
+.env
+.env.local
+.env*.local
+
+# mediamtx auto-generated certs
+auto.crt
+auto.key
