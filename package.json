@@ -1,0 +1,31 @@
+{
+  "name": "nostr-stream-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "node server.js",
+    "build": "next build",
+    "start": "NODE_ENV=production node server.js",
+    "lint": "next lint",
+    "stream:mediamtx": "mediamtx mediamtx.yml"
+  },
+  "dependencies": {
+    "@noble/hashes": "^1.8.0",
+    "dotenv": "^16.3.1",
+    "next": "^14.2.32",
+    "nostr-tools": "^2.1.8",
+    "react": "^18",
+    "react-dom": "^18"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "autoprefixer": "^10.0.1",
+    "eslint": "^8",
+    "eslint-config-next": "14.1.0",
+    "postcss": "^8",
+    "tailwindcss": "^3.3.0",
+    "typescript": "^5"
+  }
+}

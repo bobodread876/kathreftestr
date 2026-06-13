@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HLS Stream Player</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #1a1a1a; color: white; }
+        video { width: 100%; max-width: 800px; background: black; border: 2px solid #333; }
+        input { width: 500px; padding: 8px; background: #333; color: white; border: 1px solid #555; }
+        button { padding: 8px 16px; background: #4CAF50; color: white; border: none; cursor: pointer; }
+        button:hover { background: #45a049; }
+        #status { margin-top: 10px; padding: 10px; background: #2a2a2a; border: 1px solid #444; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h1>HLS Stream Player</h1>
+    <video id="video" controls></video>
+    <br><br>
+    <input type="text" id="url" placeholder="Enter HLS URL" value="http://localhost:8890/live/b2d496f7/index.m3u8">
+    <button onclick="loadStream()">Load Stream</button>
+    <button onclick="loadViaProxy()">Load via Proxy</button>
+    <div id="status"></div>
+    
+    <script>
+        function updateStatus(msg) {
+            const status = document.getElementById('status');
+            const time = new Date().toLocaleTimeString();
+            status.innerHTML = `[${time}] ${msg}<br>` + status.innerHTML;
+        }
+        
+        function loadStream() {
+            const video = document.getElementById('video');
+            const url = document.getElementById('url').value;
+            
+            updateStatus('Loading: ' + url);
+            
+            if (Hls.isSupported()) {
+                const hls = new Hls({
+                    debug: true,
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                });
+                
+                hls.loadSource(url);
+                hls.attachMedia(video);
+                
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    updateStatus('Manifest parsed, starting playback...');
+                    video.play().catch(e => updateStatus('Autoplay failed: ' + e));
+                });
+                
+                hls.on(Hls.Events.ERROR, function(event, data) {
+                    updateStatus(`Error: ${data.type} - ${data.details}`);
+                    if (data.fatal) {
+                        updateStatus('Fatal error, trying to recover...');
+                        hls.recoverMediaError();
+                    }
+                });
+            } else {
+                // For Safari
+                video.src = url;
+                video.play().catch(e => updateStatus('Play failed: ' + e));
+            }
+        }
+        
+        function loadViaProxy() {
+            // Create a proxy URL that goes through Next.js API
+            const originalUrl = document.getElementById('url').value;
+            const proxyUrl = `/api/proxy-hls?url=${encodeURIComponent(originalUrl)}`;
+            document.getElementById('url').value = proxyUrl;
+            loadStream();
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+# MediaMTX Configuration
+logLevel: info
+logDestinations: [stdout]
+
+# RTMP Server Configuration
+rtmp: yes
+rtmpAddress: :1935
+
+# HLS Server Configuration  
+hls: yes
+hlsAddress: :8888
+hlsAllowOrigin: "*"
+hlsVariant: lowLatency
+
+# Disable all unnecessary services to avoid port conflicts
+webrtc: no
+webrtcAddress: :8889  # Change from default 8889 just in case
+api: no
+metrics: no
+pprof: no
+rtsp: no  # We don't need RTSP, only RTMP
+srt: no   # Disable SRT protocol
+
+# Path Configuration
+paths:
+  all_others:
