@@ -39,11 +39,12 @@ export function startMirror(options: MirrorOptions): MirrorResult {
   // cross-origin. Dev mirrors production: same-origin /live, not MediaMTX direct.
   // (Was http://localhost:8890 — a port nothing listens on, so every published
   // event linked a dead stream.) Override with HLS_BASE for non-default ports.
+  // Set HLS_BASE to your node's public URL (e.g. https://stream.example.com/live
+  // or http://<host>:<port>/live); it's what the published Nostr event links to.
+  // Defaults to this node's own origin — correct for local/LAN, override for
+  // public self-host. (No more hardcoded cloud URL.)
   const port = process.env.PORT || "3000";
-  const defaultHlsBase = process.env.NODE_ENV === 'production'
-    ? "https://kathreftestr.onrender.com/live"
-    : `http://localhost:${port}/live`;
-  const hlsBase = process.env.HLS_BASE || defaultHlsBase;
+  const hlsBase = process.env.HLS_BASE || `http://localhost:${port}/live`;
   const quality = options.quality || "best";
   
   const rtmpUrl = `${rtmpBase}/${id}`;

@@ -1,125 +1,20 @@
-version: '3.8'
-
+# One-command self-host: `docker compose up -d` → http://localhost:3000
+# Everything (app + MediaMTX + ffmpeg + yt-dlp) is in the single image.
 services:
-  # Option 1: All-in-one container (recommended for simple deployments)
   kathreftestr:
-    build:
-      context: .
-      dockerfile: Dockerfile.unified
-    container_name: kathreftestr
+    build: .
+    image: ghcr.io/bobodread876/kathreftestr:latest
     restart: unless-stopped
     ports:
-      - "3000:3000"   # Next.js app
-      - "8082:8082"   # WebSocket server
-      - "1935:1935"   # RTMP
-      - "8888:8888"   # MediaMTX API
-      - "8889:8889"   # WebRTC
-      - "8890:8890"   # HLS
+      - "3000:3000"   # web UI + API + HLS proxy
     environment:
-      - NODE_ENV=production
-      - APP_URL=${APP_URL:-http://localhost:3000}
-      - WS_URL=${WS_URL:-ws://localhost:8082}
-      - RTMP_URL=${RTMP_URL:-rtmp://localhost:1935}
-      - HLS_URL=${HLS_URL:-http://localhost:8890}
+      # Public base for the HLS the Nostr event advertises. For LAN/home use,
+      # set this to where viewers reach you, e.g. http://<host>:3000/live
+      # or a reverse-proxied https URL. Defaults to localhost for local dev.
+      HLS_BASE: ${HLS_BASE:-http://localhost:3000/live}
+      # Comma-separated relays to publish to (defaults are sane if unset).
+      NOSTR_RELAYS: ${NOSTR_RELAYS:-}
     volumes:
-      - ./data:/data
-      - ./logs:/logs
-      - ./recordings:/recordings
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-      - "traefik.enable=true"
-      - "traefik.http.routers.kathreftestr.rule=Host(`kathreftestr.local`)"
-
-  # Option 2: Multi-container setup (uncomment for advanced deployments)
-  # Comment out the all-in-one container above and uncomment below
-
-  # mediamtx:
-  #   image: bluenviron/mediamtx:latest-ffmpeg
-  #   container_name: kathreftestr-mediamtx
-  #   restart: unless-stopped
-  #   ports:
-  #     - "1935:1935"   # RTMP
-  #     - "8888:8888"   # HTTP API
-  #     - "8889:8889"   # WebRTC
-  #     - "8890:8554"   # RTSP
-  #   volumes:
-  #     - ./mediamtx.yml:/mediamtx.yml
-  #     - ./recordings:/recordings
-  #   networks:
-  #     - kathreftestr-network
-
-  # app:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile
-  #   container_name: kathreftestr-app
-  #   restart: unless-stopped
-  #   ports:
-  #     - "3000:3000"
-  #     - "8082:8082"
-  #   environment:
-  #     - NODE_ENV=production
-  #     - REDIS_URL=redis://redis:6379
-  #     - MEDIAMTX_URL=rtmp://mediamtx:1935
-  #   volumes:
-  #     - ./data:/data
-  #     - ./logs:/logs
-  #   depends_on:
-  #     redis:
-  #       condition: service_healthy
-  #     mediamtx:
-  #       condition: service_started
-  #   networks:
-  #     - kathreftestr-network
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
-
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: kathreftestr-redis
-  #   restart: unless-stopped
-  #   volumes:
-  #     - redis_data:/data
-  #   command: redis-server --save 60 1 --loglevel warning --requirepass ${REDIS_PASSWORD:-kathreftestr}
-  #   networks:
-  #     - kathreftestr-network
-  #   healthcheck:
-  #     test: ["CMD", "redis-cli", "--raw", "ping"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-
-  # nginx:
-  #   image: nginx:alpine
-  #   container_name: kathreftestr-nginx
-  #   restart: unless-stopped
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #   volumes:
-  #     - ./nginx.conf:/etc/nginx/nginx.conf
-  #     - ./certs:/etc/nginx/certs
-  #   depends_on:
-  #     - app
-  #   networks:
-  #     - kathreftestr-network
-
+      - kathreftestr-data:/data
 volumes:
-  redis_data:
-    driver: local
-  
-networks:
-  kathreftestr-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
+  kathreftestr-data:

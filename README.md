@@ -1,63 +1,67 @@
-# Kathreftestr 🎥⚡
+# Kathreftestr 🪞⚡
 
-Stream YouTube/Twitch content to Nostr with Bitcoin Lightning tips.
+> Mirror a livestream to Nostr. *Kathreftis* (καθρέφτης) — Greek for "mirror."
 
-## Quick Start
+Point it at a YouTube or Twitch livestream; it re-streams the video as a
+**[NIP-53](https://github.com/nostr-protocol/nips/blob/master/53.md) live event**
+on Nostr, each with its own Lightning address for zaps. Self-hosted: your node,
+your keys, your relays.
 
-### One-Click Install
-```bash
-curl -sSL https://raw.githubusercontent.com/islandbitcoin/kathreftestr/main/scripts/install.sh | bash
+## How it works
+
+```
+yt-dlp → ffmpeg → MediaMTX (RTMP→HLS) → /live proxy (CORS) → kind:30311 live event
 ```
 
-### Docker
-```bash
-docker compose up -d
-```
+A fresh Nostr identity is generated per stream, its profile carries a
+`<npub>@npub.cash` Lightning address (LUD-16), and the live event points at the
+HLS URL your node serves. Any NIP-53 client (zap.stream, etc.) can find and play it.
 
-Access at: `http://localhost:3000`
+## Self-host (one command)
 
-## Features
-
-- 📺 Stream any YouTube/Twitch URL to Nostr
-- ⚡ Bitcoin Lightning tips via npub.cash
-- 🔒 Self-custody with nsec key management
-- 🌐 Works on cloud platforms with proxy support
-- 🚀 Auto-fallback when streaming is blocked
-
-## Cloud Deployment
-
-### Dealing with Streaming Blocks
-
-Many cloud providers block YouTube/Twitch streaming. Use these environment variables:
+Everything — the app, MediaMTX, ffmpeg, and yt-dlp — is in a single container.
 
 ```bash
-# Enable proxy (for Render, DigitalOcean, etc.)
-PROXY_ENABLED=true
-PROXY_TYPE=tor  # or http, socks5
-AUTO_FALLBACK=true  # Falls back to browser mode if needed
+docker compose up -d        # → http://localhost:3000
 ```
 
-See [docs/PROXY-SETUP.md](docs/PROXY-SETUP.md) for detailed proxy configuration.
+For anything beyond local use, set **`HLS_BASE`** to the URL viewers reach you at,
+so the published event links a playable stream:
 
-## Deploy Options
+```bash
+HLS_BASE=https://stream.example.com/live docker compose up -d
+# or on a LAN:  HLS_BASE=http://192.168.1.50:3000/live
+```
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/islandbitcoin/kathreftestr)
+| env | default | purpose |
+|---|---|---|
+| `HLS_BASE` | `http://localhost:3000/live` | public URL the Nostr event links to |
+| `NOSTR_RELAYS` | islandbitcoin, damus, nos.lol, primal | comma-separated relays to publish to |
+| `PORT` | `3000` | app port |
 
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/islandbitcoin/kathreftestr)
+## Develop locally
 
-[![Deploy to DigitalOcean](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/islandbitcoin/kathreftestr/tree/main)
+Requires **Node 20+**, **ffmpeg**, **yt-dlp**, and **MediaMTX** on your PATH:
 
-## Documentation
+```bash
+brew install ffmpeg yt-dlp mediamtx     # macOS
+npm install
+npm run stream:mediamtx &               # MediaMTX (RTMP :1935, HLS :8888)
+npm run dev                             # → http://localhost:3000
+```
 
-- 📚 [Deployment Guide](docs/DEPLOY.md)
-- 🔧 [Proxy Setup](docs/PROXY-SETUP.md)
-- 🚀 [Installation Script](scripts/install.sh)
+`npm run build` type-checks and builds; the dev server (`server.js`) also
+supervises MediaMTX in production.
 
-## Support
+## Scope
 
-- [GitHub Issues](https://github.com/islandbitcoin/kathreftestr/issues)
-- [Discussions](https://github.com/islandbitcoin/kathreftestr/discussions)
+This is the lean server path (`yt-dlp → ffmpeg → MediaMTX`), the right shape for
+self-hosting from home. An earlier headless-Chrome browser-capture path (built to
+work around cloud-provider IP blocks) was removed — home nodes don't hit those
+blocks, and dropping puppeteer keeps the image small.
 
----
+Only mirror content you have the right to redistribute.
 
-Built with ❤️ for the Nostr community
+## License
+
+MIT

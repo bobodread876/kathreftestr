@@ -1,72 +1,45 @@
-# Production Dockerfile for Next.js app with streaming tools
-FROM node:20-slim AS base
+# Kathreftestr — single self-contained image: Next app + MediaMTX + ffmpeg + yt-dlp.
+# server.js supervises MediaMTX, so there's no supervisord/entrypoint dance —
+# one process tree, `node server.js`. node:20-slim (Debian/glibc) so the
+# standalone yt-dlp and MediaMTX binaries run without musl gymnastics.
 
-# Install dependencies for streaming
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    ffmpeg \
-    curl \
-    wget \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install streaming tools
-RUN pip3 install --break-system-packages streamlink yt-dlp
-
-# Install MediaMTX
-RUN ARCH=$(dpkg --print-architecture) && \
-    if [ "$ARCH" = "amd64" ]; then \
-        wget https://github.com/bluenviron/mediamtx/releases/download/v1.14.0/mediamtx_v1.14.0_linux_amd64.tar.gz && \
-        tar -xzf mediamtx_v1.14.0_linux_amd64.tar.gz; \
-    else \
-        wget https://github.com/bluenviron/mediamtx/releases/download/v1.14.0/mediamtx_v1.14.0_linux_arm64v8.tar.gz && \
-        tar -xzf mediamtx_v1.14.0_linux_arm64v8.tar.gz; \
-    fi && \
-    chmod +x mediamtx && \
-    mv mediamtx /usr/local/bin/ && \
-    rm mediamtx_*.tar.gz
-
-# Copy MediaMTX config
-COPY mediamtx.yml /etc/mediamtx.yml
-
-# Set working directory
+# ---- build ----
+FROM node:20-slim AS build
 WORKDIR /app
-
-# Install dependencies
-FROM base AS deps
-COPY package*.json ./
-RUN npm ci --only=production
-
-# Build application
-FROM base AS builder
 COPY package*.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
 
-# Production image
-FROM base AS runner
+# ---- runtime ----
+FROM node:20-slim AS runtime
 WORKDIR /app
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3000 \
+    MEDIAMTX_BIN=/usr/local/bin/mediamtx \
+    MEDIAMTX_CONFIG=/etc/mediamtx.yml
 
-ENV NODE_ENV=production
+ARG MEDIAMTX_VERSION=v1.19.1
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates curl \
+ && rm -rf /var/lib/apt/lists/* \
+ && ARCH="$(dpkg --print-architecture)" \
+ && case "$ARCH" in amd64) M=amd64; YTD=yt-dlp_linux ;; arm64) M=arm64; YTD=yt-dlp_linux_aarch64 ;; *) M="$ARCH"; YTD=yt-dlp_linux ;; esac \
+ && curl -fsSL -o /usr/local/bin/yt-dlp "https://github.com/yt-dlp/yt-dlp/releases/latest/download/${YTD}" \
+ && chmod +x /usr/local/bin/yt-dlp \
+ && curl -fsSL -o /tmp/mediamtx.tar.gz "https://github.com/bluenviron/mediamtx/releases/download/${MEDIAMTX_VERSION}/mediamtx_${MEDIAMTX_VERSION}_linux_${M}.tar.gz" \
+ && tar -xzf /tmp/mediamtx.tar.gz -C /usr/local/bin mediamtx \
+ && rm /tmp/mediamtx.tar.gz \
+ && chmod +x /usr/local/bin/mediamtx
 
-# Copy necessary files
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/lib ./lib
-COPY --from=builder /app/app ./app
-COPY --from=builder /app/server.js ./server.js
-
-# Copy public directory if it exists
-RUN mkdir -p ./public
-
-# Create a non-root user
-RUN addgroup --gid 1001 nodejs && \
-    adduser --disabled-password --gecos "" --uid 1001 --ingroup nodejs nodejs
-
-USER nodejs
+COPY --from=build /app/.next ./.next
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/public ./public
+COPY package*.json next.config.js server.js ./
+COPY mediamtx.yml /etc/mediamtx.yml
 
 EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+  CMD curl -fsS http://localhost:3000/api/health >/dev/null || exit 1
 
-CMD ["npm", "start"]
+CMD ["node", "server.js"]
