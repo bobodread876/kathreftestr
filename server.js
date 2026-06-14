@@ -53,6 +53,7 @@ function printBanner(port) {
   const hlsBase = process.env.HLS_BASE || `http://localhost:${port}/live`;
   const relays = process.env.NOSTR_RELAYS || 'defaults (islandbitcoin, damus, nos.lol, primal)';
   const line = '─'.repeat(58);
+  const localHls = /localhost|127\.|192\.168\.|10\.|\.local/.test(hlsBase);
   console.log(`
 ${line}
   🪞  Kathreftestr is live
@@ -60,12 +61,18 @@ ${line}
   Open:        http://localhost:${port}
   Paste a YouTube/Twitch URL and click "Mirror to Nostr".
 
-  HLS_BASE:    ${hlsBase}
-               ↳ the URL your published stream links to. For LAN or
-                 public use, set it to where viewers reach you, e.g.
-                 HLS_BASE=http://<your-host>:${port}/live  (or an https URL).
+  HLS_BASE:    ${hlsBase}${localHls ? '   ⚠ local-only' : ''}
+               ↳ the URL your published stream links to.
   NOSTR_RELAYS: ${relays}
                ↳ comma-separated relays to publish the live event to.
+
+  Public playback (so zap.stream etc. can PLAY it, not just see the event):
+  expose this node over HTTPS and point HLS_BASE at its /live path.
+    • cloudflared (free, works):
+        cloudflared tunnel --url http://localhost:${port}
+        then start with  HLS_BASE=https://<id>.trycloudflare.com/live
+    • ngrok: only on a PAID plan — the free tier's browser-warning page
+      blocks HLS players. Paid:  HLS_BASE=https://<you>.ngrok.app/live
 ${line}
 `);
 }

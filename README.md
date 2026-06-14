@@ -39,6 +39,23 @@ HLS_BASE=https://stream.example.com/live docker compose up -d
 | `NOSTR_RELAYS` | islandbitcoin, damus, nos.lol, primal | comma-separated relays to publish to |
 | `PORT` | `3000` | app port |
 
+## Public playback (zap.stream, etc.)
+
+Remote viewers can *see* the live event with a local `HLS_BASE`, but can only
+**play** the video if the HLS URL is publicly reachable over HTTPS. Expose this
+node and point `HLS_BASE` at its `/live` path:
+
+```bash
+# cloudflared — free, no interstitial (recommended):
+cloudflared tunnel --url http://localhost:3000
+# then run with the tunnel URL:
+HLS_BASE=https://<id>.trycloudflare.com/live docker compose up -d
+```
+
+> **ngrok** only works on a **paid** plan here — the free tier serves a
+> browser-warning page that HLS players can't get past. With a paid domain:
+> `HLS_BASE=https://<you>.ngrok.app/live`.
+
 ## Develop locally
 
 Requires **Node 20+**, **ffmpeg**, **yt-dlp**, and **MediaMTX** on your PATH:
