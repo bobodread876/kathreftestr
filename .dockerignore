@@ -1,0 +1,12 @@
+# Never ship build artifacts or local installs into the image — they shadow the
+# in-image `npm ci` + `next build` and produce stale, non-reproducible images.
+node_modules
+.next
+.git
+.github
+site
+*.s9pk
+.DS_Store
+npm-debug.log*
+README.md
+docs
