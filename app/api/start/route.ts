@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateKeypair } from "@/lib/keys";
+import { fetchStreamMeta } from "@/lib/meta";
 import { startMirror } from "@/lib/mirror";
 import { publishEvent, profileKind0Template, liveEventTemplate } from "@/lib/nostr";
 import * as nip19 from "nostr-tools/nip19";
@@ -28,6 +29,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 0) Pull source metadata for attribution (title, channel, thumbnail).
+    const meta = await fetchStreamMeta(url);
+
     // 1) Start mirroring the stream to MediaMTX
     console.log(`Starting mirror for: ${url}`);
     const { id, hlsUrl, rtmpUrl } = startMirror({ sourceUrl: url });
@@ -44,15 +48,17 @@ export async function POST(req: NextRequest) {
     const lightningAddress = `${npub}@${lightningDomain}`;
     console.log(`Lightning address: ${lightningAddress}`);
 
-    // 4) Publish profile metadata (kind:0) with LUD-16
-    // This allows clients to discover the zap address from profile
+    // 4) Publish profile metadata (kind:0) with LUD-16 — named after the real
+    // source account so the mirror is properly attributed and zap-discoverable.
     const profileEvt = profileKind0Template({
       pkHex,
-      name: `Stream ${id}`,
+      name: meta.uploader || `Stream ${id}`,
       lud16: lightningAddress,
-      about: `Mirrored stream from ${urlObj.hostname}`,
-      picture: process.env.DEFAULT_THUMB,
-      website: url,
+      about: meta.uploader
+        ? `Mirror of ${meta.uploader}'s stream (originally on ${urlObj.hostname}), re-broadcast to Nostr by Kathreftestr.`
+        : `Mirrored stream from ${urlObj.hostname}`,
+      picture: meta.thumbnail || process.env.DEFAULT_THUMB,
+      website: meta.uploaderUrl || url,
     });
     
     console.log("Publishing profile event...");
@@ -65,9 +71,9 @@ export async function POST(req: NextRequest) {
       pkHex,
       dTag: id,
       streamingUrl: hlsUrl,
-      title: `Live from ${urlObj.hostname}`,
-      summary: `Mirrored with consent for development from ${url}`,
-      image: process.env.DEFAULT_THUMB,
+      title: meta.title || `Live from ${urlObj.hostname}`,
+      summary: meta.uploader ? `Mirror of ${meta.uploader} — ${url}` : `Mirrored from ${url}`,
+      image: meta.thumbnail || process.env.DEFAULT_THUMB,
       zapPubkeyHex: pkHex, // direct zaps to this pubkey
     });
     
@@ -89,10 +95,18 @@ export async function POST(req: NextRequest) {
     // public-facing deployment where the browser isn't the trusted operator.
     const returnNsec = process.env.RETURN_NSEC !== "false";
 
+    // Remote NIP-53 viewers (zap.stream) can only PLAY the stream if the HLS URL
+    // is publicly reachable over HTTPS — a localhost/LAN base resolves the event
+    // but the video won't load (unreachable + mixed-content). Flag it so the
+    // operator knows to set HLS_BASE for public playback.
+    const localHls = /^https?:\/\/(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|[^/]+\.local)/.test(hlsUrl);
+
     return NextResponse.json({
       ok: true,
       stream: {
         source: url,
+        title: meta.title || null,
+        uploader: meta.uploader || null,
         id,
         hls: hlsUrl,
         rtmp: rtmpUrl,
@@ -112,7 +126,10 @@ export async function POST(req: NextRequest) {
       lightning: {
         address: lightningAddress,
         claimWith: "https://npub.cash",
-      }
+      },
+      warning: localHls
+        ? "This HLS URL is local-only, so remote viewers (zap.stream) will see the event but can't play the video. Set HLS_BASE to a public HTTPS URL (reverse proxy / tunnel) for off-network playback."
+        : undefined,
     });
   } catch (e: any) {
     console.error("Error starting stream:", e);

@@ -4,10 +4,30 @@ import { useState } from "react";
 
 interface StartResult {
   ok: boolean;
-  stream: { source: string; id: string; hls: string; rtmp: string };
+  stream: { source: string; title?: string | null; uploader?: string | null; id: string; hls: string; rtmp: string };
   nostr: { npub: string; nsec?: string; naddr: string; liveEventId: string; profileEventId: string; publishedToRelays: string[] };
   watch: { zapStream: string; njump: string };
   lightning: { address: string; claimWith: string };
+  warning?: string;
+}
+
+function Secret({ value }: { value: string }) {
+  const [shown, setShown] = useState(false);
+  return (
+    <div className="flex items-start gap-2">
+      <code className="text-xs text-amber-200/90 break-all font-mono flex-1">
+        {shown ? value : "nsec1" + "•".repeat(54)}
+      </code>
+      <button
+        onClick={() => setShown((s) => !s)}
+        className="text-[10px] uppercase tracking-wider text-zinc-500 hover:text-zinc-300 shrink-0"
+        aria-label={shown ? "Hide secret key" : "Reveal secret key"}
+      >
+        {shown ? "🙈 hide" : "👁 reveal"}
+      </button>
+      <Copy text={value} />
+    </div>
+  );
 }
 
 function Copy({ text }: { text: string }) {
@@ -118,6 +138,19 @@ export default function Home() {
                 {stream.nostr.publishedToRelays.length === 1 ? "" : "s"}
               </span>
             </div>
+            {stream.stream.title && (
+              <div className="mb-4">
+                <div className="text-lg font-semibold leading-snug">{stream.stream.title}</div>
+                {stream.stream.uploader && (
+                  <div className="text-sm text-zinc-400">by {stream.stream.uploader}</div>
+                )}
+              </div>
+            )}
+            {stream.warning && (
+              <p className="mb-4 text-xs text-amber-300/90 bg-amber-950/30 border border-amber-900/50 rounded-lg p-3">
+                ⚠ {stream.warning}
+              </p>
+            )}
             <a
               href={stream.watch.zapStream}
               target="_blank"
@@ -141,10 +174,7 @@ export default function Home() {
                 <div className="text-[10px] uppercase tracking-wider text-amber-500/80 mb-1">
                   🔑 Secret key (nsec) — save this
                 </div>
-                <div className="flex items-start">
-                  <code className="text-xs text-amber-200/90 break-all font-mono">{stream.nostr.nsec}</code>
-                  <Copy text={stream.nostr.nsec} />
-                </div>
+                <Secret value={stream.nostr.nsec} />
                 <p className="mt-2 text-xs text-zinc-400">
                   This controls the stream&apos;s identity and is the <b>only</b> way to claim its zaps.
                   A fresh key is generated per stream and isn&apos;t stored — copy it now or the funds are unrecoverable.
