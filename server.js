@@ -44,10 +44,31 @@ app.prepare().then(() => {
   const PORT = process.env.PORT || 3000;
   server.listen(PORT, async (err) => {
     if (err) throw err;
-    console.log(`> Ready on http://localhost:${PORT}`);
     await startMediaMTX();
+    printBanner(PORT);
   });
 });
+
+function printBanner(port) {
+  const hlsBase = process.env.HLS_BASE || `http://localhost:${port}/live`;
+  const relays = process.env.NOSTR_RELAYS || 'defaults (islandbitcoin, damus, nos.lol, primal)';
+  const line = '─'.repeat(58);
+  console.log(`
+${line}
+  🪞  Kathreftestr is live
+
+  Open:        http://localhost:${port}
+  Paste a YouTube/Twitch URL and click "Mirror to Nostr".
+
+  HLS_BASE:    ${hlsBase}
+               ↳ the URL your published stream links to. For LAN or
+                 public use, set it to where viewers reach you, e.g.
+                 HLS_BASE=http://<your-host>:${port}/live  (or an https URL).
+  NOSTR_RELAYS: ${relays}
+               ↳ comma-separated relays to publish the live event to.
+${line}
+`);
+}
 
 function cleanup() {
   if (mediamtxProcess) {
