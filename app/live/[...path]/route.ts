@@ -6,8 +6,12 @@ export async function GET(
   { params }: { params: { path: string[] } }
 ) {
   const path = params.path.join('/');
-  const mediamtxUrl = `http://localhost:8888/live/${path}`;
-  
+  // Forward the query string — MediaMTX's HLS variant playlists and segments
+  // carry a `?session=…` token; dropping it makes MediaMTX 401 every sub-request,
+  // so players load the master playlist and then stall.
+  const search = new URL(req.url).search;
+  const mediamtxUrl = `http://localhost:8888/live/${path}${search}`;
+
   try {
     const response = await fetch(mediamtxUrl, {
       headers: {
