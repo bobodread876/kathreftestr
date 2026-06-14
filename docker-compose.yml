@@ -1,9 +1,12 @@
 # One-command self-host: `docker compose up -d` → http://localhost:3000
-# Everything (app + MediaMTX + ffmpeg + yt-dlp) is in the single image.
+# Runs the published multi-arch image (app + MediaMTX + ffmpeg + yt-dlp).
+# To run local source changes instead, build with the Dockerfile directly:
+#   docker build -t kathreftestr:dev . && (set image: kathreftestr:dev below)
+# — kept out of compose so `up` never ships a cache-stale local build.
 services:
   kathreftestr:
-    build: .
-    image: ghcr.io/bobodread876/kathreftestr:latest
+    image: ghcr.io/bobodread876/kathreftestr:0.1.0
+    pull_policy: always
     restart: unless-stopped
     ports:
       - "3000:3000"   # web UI + API + HLS proxy
@@ -12,7 +15,7 @@ services:
       # set this to where viewers reach you, e.g. http://<host>:3000/live
       # or a reverse-proxied https URL. Defaults to localhost for local dev.
       HLS_BASE: ${HLS_BASE:-http://localhost:3000/live}
-      # Comma-separated relays to publish to (defaults are sane if unset).
+      # Comma-separated relays to publish to (sane defaults if unset).
       NOSTR_RELAYS: ${NOSTR_RELAYS:-}
     volumes:
       - kathreftestr-data:/data
