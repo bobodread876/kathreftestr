@@ -79,8 +79,15 @@ export async function POST(req: NextRequest) {
     // Wait a bit for HLS to initialize
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    // NOTE: dev ONLY — you probably don't want to return nsec in production.
-    const returnNsec = process.env.RETURN_NSEC === "true";
+    // Addressable coordinate (NIP-19) for the kind:30311 live event — this is
+    // what NIP-53 viewers (zap.stream) and njump resolve.
+    const naddr = nip19.naddrEncode({ identifier: id, pubkey: pkHex, kind: 30311, relays });
+
+    // Self-host default: return the nsec to the local operator. It's the ONLY
+    // way to control this stream's identity and CLAIM zaps sent to its Lightning
+    // address (sign in to npub.cash with it). Set RETURN_NSEC=false on a
+    // public-facing deployment where the browser isn't the trusted operator.
+    const returnNsec = process.env.RETURN_NSEC !== "false";
 
     return NextResponse.json({
       ok: true,
@@ -93,12 +100,18 @@ export async function POST(req: NextRequest) {
       nostr: {
         npub,
         nsec: returnNsec ? nsec : undefined,
+        naddr,
         liveEventId,
         profileEventId: profileResult.id,
         publishedToRelays: relays,
       },
+      watch: {
+        zapStream: `https://zap.stream/${naddr}`,
+        njump: `https://njump.me/${naddr}`,
+      },
       lightning: {
         address: lightningAddress,
+        claimWith: "https://npub.cash",
       }
     });
   } catch (e: any) {

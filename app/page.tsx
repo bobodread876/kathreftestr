@@ -5,8 +5,26 @@ import { useState } from "react";
 interface StartResult {
   ok: boolean;
   stream: { source: string; id: string; hls: string; rtmp: string };
-  nostr: { npub: string; nsec?: string; liveEventId: string; profileEventId: string; publishedToRelays: string[] };
-  lightning: { address: string };
+  nostr: { npub: string; nsec?: string; naddr: string; liveEventId: string; profileEventId: string; publishedToRelays: string[] };
+  watch: { zapStream: string; njump: string };
+  lightning: { address: string; claimWith: string };
+}
+
+function Copy({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard?.writeText(text).then(() => {
+          setDone(true);
+          setTimeout(() => setDone(false), 1500);
+        });
+      }}
+      className="ml-2 text-[10px] uppercase tracking-wider text-zinc-500 hover:text-zinc-300 shrink-0"
+    >
+      {done ? "copied" : "copy"}
+    </button>
+  );
 }
 
 export default function Home() {
@@ -100,13 +118,46 @@ export default function Home() {
                 {stream.nostr.publishedToRelays.length === 1 ? "" : "s"}
               </span>
             </div>
+            <a
+              href={stream.watch.zapStream}
+              target="_blank"
+              rel="noreferrer"
+              className="mb-4 block w-full text-center rounded-xl bg-violet-600 text-white font-semibold py-3
+                         hover:brightness-110 active:scale-[.99] transition"
+            >
+              ▶ Watch on zap.stream
+            </a>
             <Field label="Source" value={stream.stream.source} />
-            <Field label="Nostr identity" value={stream.nostr.npub} mono />
-            <Field label="Lightning (zaps)" value={stream.lightning.address} mono />
+            <Field label="Nostr identity (npub)" value={stream.nostr.npub} mono copy />
+            <Field label="Lightning (zaps)" value={stream.lightning.address} mono copy />
             <Field label="HLS" value={stream.stream.hls} mono />
-            <p className="mt-4 text-xs text-zinc-500">
-              Find it in any NIP-53 client (zap.stream, etc.) by the npub above.
+            <p className="mt-3 text-xs text-zinc-500">
+              Also at <a className="text-violet-400 hover:underline" href={stream.watch.njump} target="_blank" rel="noreferrer">njump.me</a>,
+              or find it by npub in any NIP-53 client (Amethyst, etc.).
             </p>
+
+            {stream.nostr.nsec && (
+              <div className="mt-5 rounded-xl border border-amber-900/50 bg-amber-950/20 p-4">
+                <div className="text-[10px] uppercase tracking-wider text-amber-500/80 mb-1">
+                  🔑 Secret key (nsec) — save this
+                </div>
+                <div className="flex items-start">
+                  <code className="text-xs text-amber-200/90 break-all font-mono">{stream.nostr.nsec}</code>
+                  <Copy text={stream.nostr.nsec} />
+                </div>
+                <p className="mt-2 text-xs text-zinc-400">
+                  This controls the stream&apos;s identity and is the <b>only</b> way to claim its zaps.
+                  A fresh key is generated per stream and isn&apos;t stored — copy it now or the funds are unrecoverable.
+                </p>
+                <p className="mt-2 text-xs text-zinc-400">
+                  <b>Claim zaps:</b> sign in to{" "}
+                  <a className="text-violet-400 hover:underline" href={stream.lightning.claimWith} target="_blank" rel="noreferrer">
+                    npub.cash
+                  </a>{" "}
+                  with this nsec and withdraw the sats sent to the Lightning address above.
+                </p>
+              </div>
+            )}
             <button
               className="mt-4 w-full rounded-xl border border-zinc-700 text-zinc-200 font-semibold py-3
                          hover:bg-zinc-900 active:scale-[.99] transition disabled:opacity-50"
@@ -129,11 +180,14 @@ export default function Home() {
   );
 }
 
-function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Field({ label, value, mono, copy }: { label: string; value: string; mono?: boolean; copy?: boolean }) {
   return (
     <div className="py-2 border-b border-zinc-900 last:border-0">
       <div className="text-[10px] uppercase tracking-wider text-zinc-600">{label}</div>
-      <div className={`text-sm break-all ${mono ? "font-mono text-zinc-300" : "text-zinc-200"}`}>{value}</div>
+      <div className="flex items-start">
+        <div className={`text-sm break-all ${mono ? "font-mono text-zinc-300" : "text-zinc-200"}`}>{value}</div>
+        {copy && <Copy text={value} />}
+      </div>
     </div>
   );
 }
