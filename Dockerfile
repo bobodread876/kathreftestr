@@ -4,7 +4,7 @@
 # standalone yt-dlp and MediaMTX binaries run without musl gymnastics.
 
 # ---- build ----
-FROM node:20-slim AS build
+FROM node:22-slim AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -12,7 +12,7 @@ COPY . .
 RUN npm run build
 
 # ---- runtime ----
-FROM node:20-slim AS runtime
+FROM node:22-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
@@ -21,7 +21,11 @@ ENV NODE_ENV=production \
     MEDIAMTX_CONFIG=/etc/mediamtx.yml
 
 ARG MEDIAMTX_VERSION=v1.19.1
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates curl \
+# ca-certificates: bookworm's current store distrusts the compromised eMudhra
+# intermediates (emSign ECC Root CA - G3). Upgrade explicitly and assert it's gone.
+RUN apt-get update && apt-get upgrade -y --no-install-recommends ca-certificates \
+ && apt-get install -y --no-install-recommends ffmpeg ca-certificates curl \
+ && ! grep -q MIICTjCCAdOgAwIBAgIKPPYHqWhwDtqLhDAKBggqhkjOPQQDAzBr /etc/ssl/certs/ca-certificates.crt \
  && rm -rf /var/lib/apt/lists/* \
  && ARCH="$(dpkg --print-architecture)" \
  && case "$ARCH" in amd64) M=amd64; YTD=yt-dlp_linux ;; arm64) M=arm64; YTD=yt-dlp_linux_aarch64 ;; *) M="$ARCH"; YTD=yt-dlp_linux ;; esac \
