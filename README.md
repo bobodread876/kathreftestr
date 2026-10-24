@@ -1,6 +1,6 @@
 # Kathreftestr 🪞⚡
 
-> Mirror a livestream to Nostr. *Kathreftis* (καθρέφτης) — Greek for "mirror."
+> Mirror a livestream to Nostr. *Kathreftis* (καθρέφτης) is Greek for "mirror."
 
 Point it at a YouTube or Twitch livestream; it re-streams the video as a
 **[NIP-53](https://github.com/nostr-protocol/nips/blob/master/53.md) live event**
@@ -19,7 +19,7 @@ HLS URL your node serves. Any NIP-53 client (zap.stream, etc.) can find and play
 
 ## Self-host (one command)
 
-Everything — the app, MediaMTX, ffmpeg, and yt-dlp — is in a single container.
+The app, MediaMTX, ffmpeg, and yt-dlp all run in a single container.
 
 ```bash
 docker compose up -d        # → http://localhost:3000
@@ -52,7 +52,7 @@ cloudflared tunnel --url http://localhost:3000
 HLS_BASE=https://<id>.trycloudflare.com/live docker compose up -d
 ```
 
-> **ngrok** only works on a **paid** plan here — the free tier serves a
+> **ngrok** only works on a **paid** plan here, because the free tier serves a
 > browser-warning page that HLS players can't get past. With a paid domain:
 > `HLS_BASE=https://<you>.ngrok.app/live`.
 
@@ -74,7 +74,7 @@ supervises MediaMTX in production.
 
 This is the lean server path (`yt-dlp → ffmpeg → MediaMTX`), the right shape for
 self-hosting from home. An earlier headless-Chrome browser-capture path (built to
-work around cloud-provider IP blocks) was removed — home nodes don't hit those
+work around cloud-provider IP blocks) was removed because home nodes don't hit those
 blocks, and dropping puppeteer keeps the image small.
 
 Only mirror content you have the right to redistribute.
